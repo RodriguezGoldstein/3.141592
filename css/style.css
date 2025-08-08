@@ -1,0 +1,67 @@
+body {
+  font: 11px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.dot {
+  stroke: #000;
+}
+
+.tooltip {
+  position: absolute;
+  width: 200px;
+  height: 28px;
+  pointer-events: none;
+}
+
+/* Layout for side-by-side charts */
+#layout of three side-by-side charts section {
+  display: flex;
+  gap: 20px;
+  padding: 10px;
+}
+# each chart container flexes to equal width .chart-container {
+  flex: 1;
+}
+# chart titles .chart-container h4 {
+  text-align: center;
+  margin: 0 0 5px 0;
+  font-size: 1em;
+}
+
+/* Controls layout */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+/* GPU controls timing display */
+#gpuControls span {
+  margin-left: 10px;
+  font-weight: bold;
+}
+
+/* Legend styling */
+.legend {
+  display: flex;
+  gap: 15px;
+  padding: 5px 10px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #000;
+}

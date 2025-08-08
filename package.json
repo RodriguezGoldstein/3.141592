@@ -1,0 +1,19 @@
+{
+  "name": "pisim-demo",
+  "version": "1.0.0",
+  "description": "Monte Carlo π simulation with D3.js",
+  "scripts": {
+    "start": "http-server .",
+    "lint": "eslint js/",
+    "format": "prettier --write \"js/**/*.js\" \"css/**/*.css\" \"*.html\" README.md",
+    "format:check": "prettier --check \"js/**/*.js\" \"css/**/*.css\" \"*.html\" README.md"
+  },
+  "devDependencies": {
+    "eslint": "^7.32.0",
+    "http-server": "^0.12.3",
+    "prettier": "^2.8.8"
+  },
+  "engines": {
+    "node": ">=10"
+  }
+}

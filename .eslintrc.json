@@ -1,0 +1,19 @@
+{
+  "env": {
+    "browser": true,
+    "es6": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 2018,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", {"args": "none"}],
+    "no-var": "error",
+    "prefer-const": "error"
+  },
+  "globals": {
+    "d3": "readonly"
+  }
+}

@@ -1,0 +1,12 @@
+# Ignore macOS Finder files
+.DS_Store
+
+# Node modules
+node_modules/
+
+# Python cache
+__pycache__/
+
+# Editor directories
+.vscode/
+.idea/
