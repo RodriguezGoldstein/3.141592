@@ -19,9 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const yScale = d3.scale.linear().domain([0, 1]).range([height, 0]);
 
-  // SVG container
+  // Scatter plot SVG container inside its dedicated div
   const svg = d3
-    .select('section')
+    .select('#scatter')
     .append('svg')
     .attr('width', width + margin.left + margin.right)
     .attr('height', height + margin.top + margin.bottom)
@@ -80,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `translate(${-convMargin.left + 15},${convHeight / 2}) rotate(-90)`
     )
     .text('π Estimate');
+  const areaGen = d3.svg.area().x((d, i) => xConv(i + 1));
   const lineGen = d3.svg
     .line()
     .x((d, i) => xConv(i + 1))
