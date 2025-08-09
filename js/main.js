@@ -8,6 +8,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const methodEl = document.getElementById('methodSelect');
   const piEl = document.getElementById('pi');
   const nValEl = document.getElementById('nValue-value');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const batchSlider = document.getElementById('batchSize');
+  const batchLabel = document.getElementById('batchSize-value');
+  const gpuControls = document.getElementById('gpuControls');
+  const gpuN = document.getElementById('gpuN');
+  const gpuTime = document.getElementById('gpuTime');
+  let isPaused = false;
+  const cumPoints = [];
 
   // Chart dimensions and margins
   const margin = { top: 20, right: 15, bottom: 60, left: 60 };
@@ -156,6 +164,16 @@ document.addEventListener('DOMContentLoaded', () => {
     nValEl.textContent = N;
     const { points, values } = simulate(methodKey, N);
 
+    // If no data, clear charts and exit to avoid NaN issues
+    if (values.length === 0) {
+      g.selectAll('circle').remove();
+      convSvg.select('.area').datum([]).attr('d', '');
+      convSvg.select('.line').datum([]).attr('d', '');
+      varSvg.selectAll('.bar').remove();
+      piEl.textContent = 'N/A';
+      return;
+    }
+
     // Scatter plot (only if 2D points available)
     const scatter = g.selectAll('circle').data(points);
     scatter.exit().remove();
@@ -171,8 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let i = 0; i < values.length; i++) {
       sum += values[i];
       const avg = sum / (i + 1);
-      // scale for methods that require *4 (quarter circle)
-      cumEst.push(methodKey === 'integral' ? avg : avg * 4);
+    // scale average to π (CPU methods all use quarter-circle sampling)
+    cumEst.push(avg * 4);
     }
     // Compute error bands (±1σ/√i)
     const lower = [];
@@ -183,11 +201,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const meanY = sum / (i + 1);
       const varY = sumSq / (i + 1) - meanY * meanY;
       const se = Math.sqrt(varY / (i + 1));
-      // convert to π scale
-      const center = cumEst[i];
-      const delta = methodKey === 'integral' ? se : 4 * se;
-      lower.push(center - delta);
-      upper.push(center + delta);
+      // convert standard error to π scale
+      const delta = 4 * se;
+      lower.push(cumEst[i] - delta);
+      upper.push(cumEst[i] + delta);
     }
     // Update convergence chart axes & area/line
     const Nmax = Math.max(1, values.length);
@@ -215,11 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const { values: vals } = simulate(key, N);
       const sumVal = d3.sum(vals);
       const sumSqVal = d3.sum(vals.map((v) => v * v));
-      const mean = sumVal / vals.length;
-      const varY = sumSqVal / vals.length - mean * mean;
-      const se = Math.sqrt(varY / vals.length);
-      const sePi = key === 'integral' ? se : 4 * se;
-      return { method: key, se: sePi };
+      const varY = sumSqVal / vals.length - (sumVal / vals.length) ** 2;
+      return { method: key, se: 4 * Math.sqrt(varY / vals.length) };
     });
     const yMaxBar = d3.max(seData, (d) => d.se) || 0;
     yBar.domain([0, yMaxBar * 1.1]);
@@ -272,8 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isGPU = methodEl.value === 'gpuGrid';
     const worker = new Worker('js/worker.js', { type: 'module' });
     const batchSize = +batchSlider.value;
-    let cumPoints = [];
-    let cumValues = [];
+    let cumPointsLocal = [];
     let startTime;
 
     worker.onmessage = (e) => {
@@ -285,9 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return;
       }
-      cumPoints = cumPoints.concat(points);
-      cumValues = cumValues.concat(values);
-      if (!isPaused) update(cumPoints.length);
+      cumPointsLocal = cumPointsLocal.concat(points);
+      if (!isPaused) update(cumPointsLocal.length);
       if (isGPU && !startTime) startTime = performance.now();
     };
     worker.postMessage({ methodKey: methodEl.value, total, batchSize });
