@@ -79,4 +79,5 @@ export function gpuGrid(N) {
 export const methods = {
   quarter,
   quasi,
+  gpuGrid,
 };

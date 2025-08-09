@@ -265,7 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
   pauseBtn.addEventListener('click', () => {
     isPaused = !isPaused;
     pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
-    if (!isPaused) update(cumPoints.length);
   });
   document
     .getElementById('animateBtn')
@@ -284,6 +283,17 @@ document.addEventListener('DOMContentLoaded', () => {
     piEl.textContent = '...';
 
     const isGPU = methodEl.value === 'gpuGrid';
+    // GPU grid sampling is a one-shot operation, not streamed via worker
+    if (isGPU) {
+      const n = +gpuN.value;
+      const t0 = performance.now();
+      update(n);
+      gpuTime.textContent = Math.round(performance.now() - t0);
+      pauseBtn.disabled = true;
+      return;
+    }
+    // Streaming CPU-based sampling via Web Worker
+    pauseBtn.disabled = false;
     const worker = new Worker('js/worker.js', { type: 'module' });
     const batchSize = +batchSlider.value;
     let cumPointsLocal = [];
@@ -293,14 +303,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const { points, values, done } = e.data;
       if (done) {
         worker.terminate();
-        if (isGPU && startTime) {
-          gpuTime.textContent = Math.round(performance.now() - startTime);
-        }
         return;
       }
       cumPointsLocal = cumPointsLocal.concat(points);
       if (!isPaused) update(cumPointsLocal.length);
-      if (isGPU && !startTime) startTime = performance.now();
+      if (!startTime) startTime = performance.now();
     };
     worker.postMessage({ methodKey: methodEl.value, total, batchSize });
   }
