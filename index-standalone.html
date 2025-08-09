@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Standalone Pi Monte Carlo Simulation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar">
+      <h1>Monte Carlo π Simulation</h1>
+      <label>Number of simulations:
+        <input type="number" id="nValue" min="0" max="100000" step="100">
+        <span id="nValue-value"></span>
+      </label>
+      <label>Batch size:
+        <input type="range" id="batchSize" min="1" max="1000" step="1" value="100">
+        <span id="batchSize-value"></span>
+      </label>
+      <label>Animation speed (ms):
+        <input type="range" id="speedSlider" min="10" max="1000" step="10" value="100">
+        <span id="speedValue"></span>
+      </label>
+      <label>Method:
+        <select id="methodSelect">
+          <option value="quarter">Quarter Circle</option>
+          <option value="quasi">Quasi‑MC</option>
+        </select>
+      </label>
+      <button id="animateBtn">Animate</button>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-box" style="background: blue"></span>Inside</div>
+        <div class="legend-item"><span class="legend-box" style="background: red"></span>Outside</div>
+      </div>
+      <h3>π ≈ <span id="pi"></span></h3>
+    </div>
+    <div class="column">
+      <div class="chart-container"><h4>Scatter Plot</h4><div id="scatter"></div></div>
+    </div>
+    <div class="column">
+      <div class="chart-container"><h4>Convergence Plot</h4><div id="convergence"></div></div>
+      <div class="chart-container"><h4>Std. Error Comparison</h4><div id="variance"></div></div>
+    </div>
+  </div>
+  <script>
+    // Sampling methods
+    function quarter(N) {
+      const points = [];
+      const values = [];
+      for (let i = 0; i < N; i++) {
+        const x = Math.random();
+        const y = Math.random();
+        points.push([x, y]);
+        values.push(x * x + y * y < 1 ? 1 : 0);
+      }
+      return { points, values };
+    }
+    function halton(index, base) {
+      let result = 0, f = 1 / base, i = index;
+      while (i > 0) {
+        result += f * (i % base);
+        i = Math.floor(i / base);
+        f /= base;
+      }
+      return result;
+    }
+    function quasi(N) {
+      const points = [];
+      const values = [];
+      for (let i = 1; i <= N; i++) {
+        const x = halton(i, 2);
+        const y = halton(i, 3);
+        points.push([x, y]);
+        values.push(x * x + y * y < 1 ? 1 : 0);
+      }
+      return { points, values };
+    }
+    const methods = { quarter, quasi };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const inputEl = document.getElementById('nValue');
+      const methodEl = document.getElementById('methodSelect');
+      const piEl = document.getElementById('pi');
+      const nValEl = document.getElementById('nValue-value');
+      const batchSlider = document.getElementById('batchSize');
+      const batchLabel = document.getElementById('batchSize-value');
+      const speedSlider = document.getElementById('speedSlider');
+      const speedValue = document.getElementById('speedValue');
+      batchLabel.textContent = batchSlider.value;
+      speedValue.textContent = speedSlider.value;
+      batchSlider.addEventListener('input', () => (batchLabel.textContent = batchSlider.value));
+      speedSlider.addEventListener('input', () => (speedValue.textContent = speedSlider.value));
+
+      // Chart setup (D3) and update/animate functions
+      const margin = { top: 20, right: 15, bottom: 60, left: 60 };
+      const width = 600 - margin.left - margin.right;
+      const height = 600 - margin.top - margin.bottom;
+
+      const xScale = d3.scale.linear().domain([0, 1]).range([0, width]);
+      const yScale = d3.scale.linear().domain([0, 1]).range([height, 0]);
+
+      const svg = d3
+        .select('#scatter')
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .attr('class', 'chart');
+      const mainG = svg
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+      mainG
+        .append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.svg.axis().scale(xScale).orient('bottom'));
+      mainG.append('g').call(d3.svg.axis().scale(yScale).orient('left'));
+      const gPts = mainG.append('g');
+
+      const convMargin = { top: 20, right: 20, bottom: 30, left: 50 };
+      const convWidth = width - convMargin.left - convMargin.right;
+      const convHeight = 200;
+      const convSvg = d3
+        .select('#convergence')
+        .append('svg')
+        .attr('width', convWidth + convMargin.left + convMargin.right)
+        .attr('height', convHeight + convMargin.top + convMargin.bottom)
+        .append('g')
+        .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
+      const xConv = d3.scale.linear().range([0, convWidth]);
+      const yConv = d3.scale.linear().range([convHeight, 0]);
+      convSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`);
+      convSvg.append('g').attr('class', 'y-axis');
+      convSvg
+        .append('path')
+        .attr('class', 'area')
+        .style('fill', 'lightsteelblue')
+        .style('opacity', 0.3);
+      convSvg.append('path').attr('class', 'line').style('fill', 'none').style('stroke', 'steelblue');
+
+      const varSvg = d3
+        .select('#variance')
+        .append('svg')
+        .attr('width', convWidth + convMargin.left + convMargin.right)
+        .attr('height', convHeight + convMargin.top + convMargin.bottom)
+        .append('g')
+        .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
+      const methodKeys = Object.keys(methods);
+      const xBar = d3.scale.ordinal().domain(methodKeys).rangeBands([0, convWidth], 0.2);
+      const yBar = d3.scale.linear().range([convHeight, 0]);
+      varSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`).call(d3.svg.axis().scale(xBar).orient('bottom'));
+      varSvg.append('g').attr('class', 'y-axis');
+
+      // (update & animate functions go here…)
+    });
+  </script>
+</body>
+</html>
