@@ -7,86 +7,55 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
-    <header>
+    <div class="layout">
       <div class="sidebar">
-        <h1>Computing Pi <big>π</big> - Monte Carlo Simulation</h1>
-        <h3>
-          <label for="nValue">
-            Number of simulations: <span id="nValue-value"></span>
-          </label>
-          <input
-            type="number"
-            min="0"
-            max="100000"
-            step="100"
-            value="0"
-            id="nValue"
-          />
-          <button id="animateBtn">Animate</button>
-        </h3>
-        <h3>
-          <label for="batchSize">
-            Batch size (points per update): <span id="batchSize-value"></span>
-          </label>
-          <input
-            type="range"
-            id="batchSize"
-            min="1"
-            max="1000"
-            step="1"
-            value="100"
-          />
-        </h3>
-        <h3>
-          <label for="speedSlider">
-            Animation speed (ms per update): <span id="speedValue">100</span>
-          </label>
-          <input
-            type="range"
-            id="speedSlider"
-            min="10"
-            max="1000"
-            step="10"
-            value="100"
-          />
-        </h3>
-        <h3>
-          <label for="methodSelect">Method:</label>
+        <h1>Monte Carlo π Simulation</h1>
+        <label for="nValue">
+          Number of simulations:
+          <input type="number" id="nValue" min="0" max="100000" step="100" />
+          <span id="nValue-value"></span>
+        </label>
+        <label for="batchSize">
+          Batch size:
+          <input type="range" id="batchSize" min="1" max="1000" step="1" />
+          <span id="batchSize-value"></span>
+        </label>
+        <label for="speedSlider">
+          Animation speed (ms):
+          <input type="range" id="speedSlider" min="10" max="1000" step="10" />
+          <span id="speedValue"></span>
+        </label>
+        <label for="methodSelect">
+          Method:
           <select id="methodSelect">
             <option value="quarter">Quarter Circle</option>
-            <option value="quasi">Quasi‑MC (Low‑discrepancy)</option>
+            <option value="quasi">Quasi‑MC</option>
           </select>
-        </h3>
-        <!-- GPU controls removed -->
+        </label>
+        <button id="animateBtn">Animate</button>
         <div class="legend">
-          <div class="legend-item">
-            <span class="legend-box" style="background: blue"></span>Inside
-            Circle
-          </div>
-          <div class="legend-item">
-            <span class="legend-box" style="background: red"></span>Outside
-            Circle
-          </div>
+          <div class="legend-item"><span class="legend-box" style="background: blue"></span>Inside</div>
+          <div class="legend-item"><span class="legend-box" style="background: red"></span>Outside</div>
         </div>
-        <h3>Pi Approximation: <span id="pi"></span></h3>
+        <h3>π ≈ <span id="pi"></span></h3>
       </div>
-    </header>
-    <section>
-      <div class="main-content">
+      <div class="column">
         <div class="chart-container">
           <h4>Scatter Plot</h4>
           <div id="scatter"></div>
         </div>
+      </div>
+      <div class="column">
         <div class="chart-container">
-          <h4>Convergence Plot (π Estimate)</h4>
+          <h4>Convergence Plot</h4>
           <div id="convergence"></div>
         </div>
         <div class="chart-container">
-          <h4>Method Comparison (Std. Error)</h4>
+          <h4>Std. Error Comparison</h4>
           <div id="variance"></div>
         </div>
       </div>
-    </section>
+    </div>
     <script type="module" src="js/main.js"></script>
   </body>
 </html>

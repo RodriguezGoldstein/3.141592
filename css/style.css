@@ -20,18 +20,33 @@ body {
   pointer-events: none;
 }
 
-/* Layout for side-by-side charts */
-#layout of three side-by-side charts section {
+/* Overall three-column layout: sidebar, scatter, and two charts */
+.layout {
   display: flex;
   gap: 20px;
   padding: 10px;
 }
-# each chart container flexes to equal width .chart-container {
+/* Sidebar column */
+.sidebar {
+  flex: 0 0 260px;
+  padding: 10px;
+  border-right: 1px solid #ccc;
+}
+/* Scatter and others columns */
+.column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Individual chart container stretches */
+.chart-container {
   flex: 1;
 }
-# chart titles .chart-container h4 {
+/* Chart titles */
+.chart-container h4 {
   text-align: center;
-  margin: 0 0 5px 0;
+  margin: 0 0 5px;
   font-size: 1em;
 }
 
