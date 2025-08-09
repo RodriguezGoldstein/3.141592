@@ -174,6 +174,9 @@ body {
       speedValue.textContent = speedSlider.value;
       batchSlider.addEventListener('input', () => (batchLabel.textContent = batchSlider.value));
       speedSlider.addEventListener('input', () => (speedValue.textContent = speedSlider.value));
+      // reflect the user-entered simulation count in the label
+      nValEl.textContent = inputEl.value;
+      inputEl.addEventListener('input', () => (nValEl.textContent = inputEl.value));
 
       // Chart setup (D3) and update/animate functions
       const margin = { top: 20, right: 15, bottom: 60, left: 60 };
@@ -280,7 +283,6 @@ body {
         const methodKey = methodEl.value;
         const points = data ? data.points : simulate(methodKey, N).points;
         const values = data ? data.values : simulate(methodKey, N).values;
-        nValEl.textContent = values.length;
 
         // If no data points, clear charts and exit to avoid NaN issues
         if (values.length === 0) {
@@ -378,46 +380,54 @@ body {
         const total = +inputEl.value;
         if (total > 0) animate(total);
       });
-      /**
-       * Animate streaming sampling in batches with adjustable speed.
-       * @param {number} total - total points to sample
-       */
-      function animate(total) {
-        // clear existing charts
-        g.selectAll('circle').remove();
-        convSvg.select('.area').datum([]).attr('d', '');
-        convSvg.select('.line').datum([]).attr('d', '');
-        varSvg.selectAll('.bar').remove();
-        piEl.textContent = '...';
+  /**
+   * Animate or statically plot sampling in batches with adjustable speed.
+   * @param {number} total - total points to sample
+   */
+  let timer = null;
+  function animate(total) {
+    // clear any prior animation
+    if (timer) clearInterval(timer);
+    // reset charts
+    g.selectAll('circle').remove();
+    convSvg.select('.area').datum([]).attr('d', '');
+    convSvg.select('.line').datum([]).attr('d', '');
+    varSvg.selectAll('.bar').remove();
+    piEl.textContent = '...';
 
-        const methodKey = methodEl.value;
-        const batchSize = +batchSlider.value;
-        const delay = +speedSlider.value;
-        let cumPointsLocal = [], cumValuesLocal = [], count = 0;
-        let full;
-        if (methodKey === 'quasi') {
-          // Pre-generate full sequence for halton streaming
-          full = simulate(methodKey, total);
-        }
-        const timer = setInterval(() => {
-          if (count >= total) {
-            clearInterval(timer);
-            return;
-          }
-          let pts, vals;
-          if (methodKey === 'quasi') {
-            pts = full.points.slice(count, count + batchSize);
-            vals = full.values.slice(count, count + batchSize);
-          } else {
-            const step = Math.min(batchSize, total - count);
-            ({ points: pts, values: vals } = simulate(methodKey, step));
-          }
-          cumPointsLocal = cumPointsLocal.concat(pts);
-          cumValuesLocal = cumValuesLocal.concat(vals);
-          update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
-          count += pts.length;
-        }, delay);
+    const methodKey = methodEl.value;
+    const batchSize = +batchSlider.value;
+    const delay = +speedSlider.value;
+    // Pre-generate full sequence for quasi
+    const full = methodKey === 'quasi' ? simulate(methodKey, total) : null;
+    // If batchSize >= total, do one-off draw
+    if (batchSize >= total) {
+      const pts = full ? full.points : simulate(methodKey, total).points;
+      const vals = full ? full.values : simulate(methodKey, total).values;
+      update(undefined, { points: pts, values: vals });
+      return;
+    }
+    let cumPointsLocal = [], cumValuesLocal = [], count = 0;
+    timer = setInterval(() => {
+      if (count >= total) {
+        clearInterval(timer);
+        timer = null;
+        return;
       }
+      let pts, vals;
+      if (methodKey === 'quasi') {
+        pts = full.points.slice(count, count + batchSize);
+        vals = full.values.slice(count, count + batchSize);
+      } else {
+        const step = Math.min(batchSize, total - count);
+        ({ points: pts, values: vals } = simulate(methodKey, step));
+      }
+      cumPointsLocal = cumPointsLocal.concat(pts);
+      cumValuesLocal = cumValuesLocal.concat(vals);
+      update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
+      count += pts.length;
+    }, delay);
+  }
     });
   </script>
 </body>
