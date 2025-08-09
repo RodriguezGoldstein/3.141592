@@ -284,27 +284,31 @@ document.addEventListener('DOMContentLoaded', () => {
     piEl.textContent = '...';
 
     const methodKey = methodEl.value;
-    // For quasi-MC, plot all points at once (low-discrepancy sequence)
-    if (methodKey === 'quasi') {
-      const { points, values } = simulate(methodKey, total);
-      update(undefined, { points, values });
-      return;
-    }
     const batchSize = +batchSlider.value;
-    const delay = +speedSlider.value;
+    const delay     = +speedSlider.value;
     let cumPointsLocal = [], cumValuesLocal = [], count = 0;
-
+    let full;
+    if (methodKey === 'quasi') {
+      // Pre-generate full sequence for halton streaming
+      full = simulate(methodKey, total);
+    }
     const timer = setInterval(() => {
-      const step = Math.min(batchSize, total - count);
-      if (step > 0) {
-        const { points, values } = simulate(methodKey, step);
-        cumPointsLocal = cumPointsLocal.concat(points);
-        cumValuesLocal = cumValuesLocal.concat(values);
-        update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
-        count += step;
-      } else {
+      if (count >= total) {
         clearInterval(timer);
+        return;
       }
+      let pts, vals;
+      if (methodKey === 'quasi') {
+        pts = full.points.slice(count, count + batchSize);
+        vals = full.values.slice(count, count + batchSize);
+      } else {
+        const step = Math.min(batchSize, total - count);
+        ({ points: pts, values: vals } = simulate(methodKey, step));
+      }
+      cumPointsLocal = cumPointsLocal.concat(pts);
+      cumValuesLocal = cumValuesLocal.concat(vals);
+      update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
+      count += pts.length;
     }, delay);
   }
 });
