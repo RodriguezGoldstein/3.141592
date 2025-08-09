@@ -4,7 +4,90 @@
   <meta charset="utf-8">
   <title>Standalone Pi Monte Carlo Simulation</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+body {
+  font: 11px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.dot {
+  stroke: #000;
+}
+
+.tooltip {
+  position: absolute;
+  width: 200px;
+  height: 28px;
+  pointer-events: none;
+}
+
+/* Overall three-column layout: sidebar, scatter, and two charts */
+.layout {
+  display: flex;
+  gap: 20px;
+  padding: 10px;
+}
+/* Sidebar column */
+.sidebar {
+  flex: 0 0 260px;
+  padding: 10px;
+  border-right: 1px solid #ccc;
+}
+/* Scatter and others columns */
+.column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Individual chart container stretches */
+.chart-container {
+  flex: 1;
+}
+/* Chart titles */
+.chart-container h4 {
+  text-align: center;
+  margin: 0 0 5px;
+  font-size: 1em;
+}
+
+/* Controls layout */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+/* GPU controls timing display */
+#gpuControls span {
+  margin-left: 10px;
+  font-weight: bold;
+}
+
+/* Legend styling */
+.legend {
+  display: flex;
+  gap: 15px;
+  padding: 5px 10px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #000;
+}
+  </style>
 </head>
 <body>
   <div class="layout">
@@ -114,7 +197,7 @@
         .attr('transform', `translate(0,${height})`)
         .call(d3.svg.axis().scale(xScale).orient('bottom'));
       mainG.append('g').call(d3.svg.axis().scale(yScale).orient('left'));
-      const gPts = mainG.append('g');
+      const g = mainG.append('g');
 
       const convMargin = { top: 20, right: 20, bottom: 30, left: 50 };
       const convWidth = width - convMargin.left - convMargin.right;
@@ -128,15 +211,53 @@
         .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
       const xConv = d3.scale.linear().range([0, convWidth]);
       const yConv = d3.scale.linear().range([convHeight, 0]);
+      const xAxisConv = d3.svg.axis().scale(xConv).orient('bottom');
+      const yAxisConv = d3.svg.axis().scale(yConv).orient('left');
       convSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`);
       convSvg.append('g').attr('class', 'y-axis');
+      // Convergence plot axis labels
+      convSvg
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('text-anchor', 'middle')
+        .attr('x', convWidth / 2)
+        .attr('y', convHeight + convMargin.bottom - 5)
+        .text('Iteration');
+      convSvg
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('text-anchor', 'middle')
+        .attr(
+          'transform',
+          `translate(${-convMargin.left + 15},${convHeight / 2}) rotate(-90)`
+        )
+        .text('π Estimate');
+      const areaGen = d3.svg.area().x((d, i) => xConv(i + 1));
+      const lineGen = d3.svg
+        .line()
+        .x((d, i) => xConv(i + 1))
+        .y((d) => yConv(d));
       convSvg
         .append('path')
         .attr('class', 'area')
         .style('fill', 'lightsteelblue')
         .style('opacity', 0.3);
-      convSvg.append('path').attr('class', 'line').style('fill', 'none').style('stroke', 'steelblue');
+      convSvg
+        .append('path')
+        .attr('class', 'line')
+        .style('fill', 'none')
+        .style('stroke', 'steelblue');
 
+      /**
+       * Dispatch to the selected sampling method.
+       * @param {string} key - method key
+       * @param {number} N - number of samples
+       * @returns {{points: Array<[number,number]>, values: number[]}}
+       */
+      function simulate(key, N) {
+        const fn = methods[key] || methods.quarter;
+        return fn(N);
+      }
       const varSvg = d3
         .select('#variance')
         .append('svg')
@@ -150,7 +271,153 @@
       varSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`).call(d3.svg.axis().scale(xBar).orient('bottom'));
       varSvg.append('g').attr('class', 'y-axis');
 
-      // (update & animate functions go here…)
+      /**
+       * Update scatter, convergence, and variance charts.
+       * @param {number} N - number of samples (ignored if data provided)
+       * @param {{points:Array,values:Array}} [data] - explicit sample data for streaming
+       */
+      function update(N, data) {
+        const methodKey = methodEl.value;
+        const points = data ? data.points : simulate(methodKey, N).points;
+        const values = data ? data.values : simulate(methodKey, N).values;
+        nValEl.textContent = values.length;
+
+        // If no data points, clear charts and exit to avoid NaN issues
+        if (values.length === 0) {
+          g.selectAll('circle').remove();
+          convSvg.select('.area').datum([]).attr('d', '');
+          convSvg.select('.line').datum([]).attr('d', '');
+          varSvg.selectAll('.bar').remove();
+          piEl.textContent = 'N/A';
+          return;
+        }
+
+        // Scatter plot (only if 2D points available)
+        const scatter = g.selectAll('circle').data(points);
+        scatter.exit().remove();
+        scatter.enter().append('circle').attr('r', 2);
+        scatter
+          .attr('cx', (d) => xScale(d[0]))
+          .attr('cy', (d) => yScale(d[1]))
+          .style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
+
+        // Cumulative π estimates for convergence
+        const cumEst = [];
+        let sum = 0;
+        for (let i = 0; i < values.length; i++) {
+          sum += values[i];
+          const avg = sum / (i + 1);
+          // scale average to π (CPU methods all use quarter-circle sampling)
+          cumEst.push(avg * 4);
+        }
+        // Compute error bands (±1σ/√i)
+        const lower = [];
+        const upper = [];
+        let cumSum2 = 0;
+        let sumSq = 0;
+        for (let i = 0; i < values.length; i++) {
+          cumSum2 += values[i];
+          sumSq += values[i] * values[i];
+          const meanY = cumSum2 / (i + 1);
+          const varY = sumSq / (i + 1) - meanY * meanY;
+          const se = Math.sqrt(varY / (i + 1));
+          // convert standard error to π scale
+          const delta = 4 * se;
+          lower.push(cumEst[i] - delta);
+          upper.push(cumEst[i] + delta);
+        }
+        // Update convergence chart axes & area/line
+        const Nmax = Math.max(1, values.length);
+        xConv.domain([1, Nmax]);
+        const yMin = d3.min(lower.concat(cumEst));
+        const yMax = d3.max(upper.concat(cumEst));
+        yConv.domain([yMin * 0.95, yMax * 1.05]);
+        convSvg.select('.x-axis').call(xAxisConv);
+        convSvg.select('.y-axis').call(yAxisConv);
+        convSvg
+          .select('.area')
+          .datum(cumEst)
+          .attr(
+            'd',
+            areaGen.y0((d, i) => yConv(lower[i])).y1((d, i) => yConv(upper[i]))
+          );
+        convSvg.select('.line').datum(cumEst).attr('d', lineGen);
+
+        // Display final approximation
+        const final = cumEst.length > 0 ? cumEst[cumEst.length - 1] : 0;
+        piEl.textContent = values.length > 0 ? final.toFixed(4) : 'N/A';
+
+        // Update variance/comparison bar chart (standard error per method)
+        const seData = methodKeys.map((key) => {
+          const curN = values.length;
+          const { values: vals } = simulate(key, curN);
+          const sumVal = d3.sum(vals);
+          const sumSqVal = d3.sum(vals.map((v) => v * v));
+          const varY = sumSqVal / vals.length - (sumVal / vals.length) ** 2;
+          return { method: key, se: 4 * Math.sqrt(varY / vals.length) };
+        });
+        const yMaxBar = d3.max(seData, (d) => d.se) || 0;
+        yBar.domain([0, yMaxBar * 1.1]);
+        varSvg.select('.y-axis').call(yAxisBar);
+        const bars = varSvg.selectAll('.bar').data(seData);
+        bars.exit().remove();
+        bars
+          .enter()
+          .append('rect')
+          .attr('class', 'bar')
+          .attr('x', (d) => xBar(d.method))
+          .attr('width', xBar.rangeBand())
+          .style('fill', 'orange');
+        bars
+          .attr('y', (d) => yBar(d.se))
+          .attr('height', (d) => convHeight - yBar(d.se));
+      }
+
+      // User must enter N and click Animate to run a single batch
+      document.getElementById('animateBtn').addEventListener('click', () => {
+        const total = +inputEl.value;
+        if (total > 0) animate(total);
+      });
+      /**
+       * Animate streaming sampling in batches with adjustable speed.
+       * @param {number} total - total points to sample
+       */
+      function animate(total) {
+        // clear existing charts
+        g.selectAll('circle').remove();
+        convSvg.select('.area').datum([]).attr('d', '');
+        convSvg.select('.line').datum([]).attr('d', '');
+        varSvg.selectAll('.bar').remove();
+        piEl.textContent = '...';
+
+        const methodKey = methodEl.value;
+        const batchSize = +batchSlider.value;
+        const delay = +speedSlider.value;
+        let cumPointsLocal = [], cumValuesLocal = [], count = 0;
+        let full;
+        if (methodKey === 'quasi') {
+          // Pre-generate full sequence for halton streaming
+          full = simulate(methodKey, total);
+        }
+        const timer = setInterval(() => {
+          if (count >= total) {
+            clearInterval(timer);
+            return;
+          }
+          let pts, vals;
+          if (methodKey === 'quasi') {
+            pts = full.points.slice(count, count + batchSize);
+            vals = full.values.slice(count, count + batchSize);
+          } else {
+            const step = Math.min(batchSize, total - count);
+            ({ points: pts, values: vals } = simulate(methodKey, step));
+          }
+          cumPointsLocal = cumPointsLocal.concat(pts);
+          cumValuesLocal = cumValuesLocal.concat(vals);
+          update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
+          count += pts.length;
+        }, delay);
+      }
     });
   </script>
 </body>
