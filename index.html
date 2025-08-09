@@ -15,29 +15,36 @@
           <input type="number" id="nValue" min="0" max="100000" step="100" />
           <span id="nValue-value"></span>
         </label>
+        <br />
         <label for="batchSize">
           Batch size:
+          <br />
           <input type="range" id="batchSize" min="1" max="1000" step="1" />
           <span id="batchSize-value"></span>
         </label>
+        <br />
         <label for="speedSlider">
           Animation speed (ms):
+          <br />
           <input type="range" id="speedSlider" min="10" max="1000" step="10" />
           <span id="speedValue"></span>
         </label>
+        <br />
         <label for="methodSelect">
           Method:
+          <br />
           <select id="methodSelect">
             <option value="quarter">Quarter Circle</option>
             <option value="quasi">Quasi‑MC</option>
           </select>
         </label>
         <button id="animateBtn">Animate</button>
+        <h3>π ≈ <span id="pi"></span></h3>
+        <br />
         <div class="legend">
           <div class="legend-item"><span class="legend-box" style="background: blue"></span>Inside</div>
           <div class="legend-item"><span class="legend-box" style="background: red"></span>Outside</div>
         </div>
-        <h3>π ≈ <span id="pi"></span></h3>
       </div>
       <div class="column">
         <div class="chart-container">
