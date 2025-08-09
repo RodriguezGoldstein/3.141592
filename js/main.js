@@ -7,8 +7,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const inputEl = document.getElementById('nValue');
   const methodEl = document.getElementById('methodSelect');
   const piEl = document.getElementById('pi');
+
   const nValEl = document.getElementById('nValue-value');
-  const pauseBtn = document.getElementById('pauseBtn');
+  // Batch and animation speed controls
+  const batchSlider = document.getElementById('batchSize');
+  const batchLabel = document.getElementById('batchSize-value');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedValue = document.getElementById('speedValue');
+
+  // Initialize control labels
+  batchLabel.textContent = batchSlider.value;
+  speedValue.textContent = speedSlider.value;
+  batchSlider.addEventListener('input', () => (batchLabel.textContent = batchSlider.value));
+  speedSlider.addEventListener('input', () => (speedValue.textContent = speedSlider.value));
 
   // Chart dimensions and margins
   const margin = { top: 20, right: 15, bottom: 60, left: 60 };
@@ -256,12 +267,44 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // User must enter N and click Animate to run a single batch
-  pauseBtn.disabled = true;
   document.getElementById('animateBtn').addEventListener('click', () => {
     const total = +inputEl.value;
-    if (total > 0) {
-      const { points, values } = simulate(methodEl.value, total);
-      update(undefined, { points, values });
-    }
+    if (total > 0) animate(total);
   });
+  /**
+   * Animate streaming sampling in batches with adjustable speed.
+   * @param {number} total - total points to sample
+   */
+  function animate(total) {
+    // clear existing charts
+    g.selectAll('circle').remove();
+    convSvg.select('.area').datum([]).attr('d', '');
+    convSvg.select('.line').datum([]).attr('d', '');
+    varSvg.selectAll('.bar').remove();
+    piEl.textContent = '...';
+
+    const methodKey = methodEl.value;
+    // For quasi-MC, plot all points at once (low-discrepancy sequence)
+    if (methodKey === 'quasi') {
+      const { points, values } = simulate(methodKey, total);
+      update(undefined, { points, values });
+      return;
+    }
+    const batchSize = +batchSlider.value;
+    const delay = +speedSlider.value;
+    let cumPointsLocal = [], cumValuesLocal = [], count = 0;
+
+    const timer = setInterval(() => {
+      const step = Math.min(batchSize, total - count);
+      if (step > 0) {
+        const { points, values } = simulate(methodKey, step);
+        cumPointsLocal = cumPointsLocal.concat(points);
+        cumValuesLocal = cumValuesLocal.concat(values);
+        update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
+        count += step;
+      } else {
+        clearInterval(timer);
+      }
+    }, delay);
+  }
 });

@@ -22,7 +22,7 @@ npm start
 - Enter **Number of simulations** and click **Animate** to start the simulation stream.
 - Click **Pause** to freeze updates, **Resume** to continue.
 - Adjust **Batch size** to trade off animation smoothness vs. UI responsiveness.
-- Click **Animate** after setting the number of simulations and batch size to start; plots do not update automatically.
+- Click **Animate** after setting the number of simulations, batch size, and animation speed to start; plots do not update automatically.
 
 ## Project structure
 
