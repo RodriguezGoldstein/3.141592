@@ -56,28 +56,9 @@ export function quasi(N) {
  * GPU Grid sampling: uniformly sample an N×N grid on the unit square via GPU.js,
  * count points inside quarter circle.
  */
-export function gpuGrid(N) {
-  if (typeof GPU === 'undefined') {
-    throw new Error('GPU.js not loaded');
-  }
-  const total = N * N;
-  const gpu = new GPU();
-  const kernel = gpu
-    .createKernel(function (n) {
-      const i = this.thread.x;
-      const x = ((i % n) + 0.5) / n;
-      const y = (Math.floor(i / n) + 0.5) / n;
-      return x * x + y * y < 1 ? 1 : 0;
-    })
-    .setOutput([total]);
-  const values = Array.from(kernel(N));
-  const points = [];
-  return { points, values };
-}
 
 // Mapping of method keys to functions
 export const methods = {
   quarter,
   quasi,
-  gpuGrid,
 };

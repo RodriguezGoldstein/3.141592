@@ -18,7 +18,7 @@ npm start
 
 **Usage:**
 
-- Select a sampling **Method** (Quarter Circle, Quasi‑MC, GPU Grid Sampling).
+- Select a sampling **Method** (Quarter Circle, Quasi‑MC).
 - Enter **Number of simulations** and click **Animate** to start the simulation stream.
 - Click **Pause** to freeze updates, **Resume** to continue.
 - Adjust **Batch size** to trade off animation smoothness vs. UI responsiveness.
@@ -42,7 +42,7 @@ README.md        # this file
 - Analyze convergence rate (error vs. N)
 - Animate point insertion or streaming visualization
 - Compare different Monte Carlo methods
-- Explore alternative sampling methods: quasi‑Monte Carlo, GPU grid sampling
+- Explore alternative sampling methods: quasi‑Monte Carlo
 - Add error bands (±1σ/√N) to convergence plot
 - Compare standard error across methods via a bar chart
 

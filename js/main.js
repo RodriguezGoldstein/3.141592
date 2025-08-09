@@ -11,11 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const pauseBtn = document.getElementById('pauseBtn');
   const batchSlider = document.getElementById('batchSize');
   const batchLabel = document.getElementById('batchSize-value');
-  const gpuControls = document.getElementById('gpuControls');
-  const gpuN = document.getElementById('gpuN');
-  const gpuTime = document.getElementById('gpuTime');
   let isPaused = false;
-  const cumPoints = [];
 
   // Chart dimensions and margins
   const margin = { top: 20, right: 15, bottom: 60, left: 60 };
@@ -159,12 +155,18 @@ document.addEventListener('DOMContentLoaded', () => {
    * Update both scatter and convergence charts.
    * @param {number} N - number of simulations
    */
-  function update(N) {
+  /**
+   * Update scatter, convergence, and variance charts.
+   * @param {number} N - number of samples (ignored if data provided)
+   * @param {{points:Array,values:Array}} [data] - explicit sample data for streaming
+   */
+  function update(N, data) {
     const methodKey = methodEl.value;
-    nValEl.textContent = N;
-    const { points, values } = simulate(methodKey, N);
+    const points = data ? data.points : simulate(methodKey, N).points;
+    const values = data ? data.values : simulate(methodKey, N).values;
+    nValEl.textContent = values.length;
 
-    // If no data, clear charts and exit to avoid NaN issues
+    // If no data points, clear charts and exit to avoid NaN issues
     if (values.length === 0) {
       g.selectAll('circle').remove();
       convSvg.select('.area').datum([]).attr('d', '');
@@ -195,10 +197,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Compute error bands (±1σ/√i)
     const lower = [];
     const upper = [];
+    // Compute error bands (±1σ/√i)
+    let cumSum2 = 0;
     let sumSq = 0;
     for (let i = 0; i < values.length; i++) {
+      cumSum2 += values[i];
       sumSq += values[i] * values[i];
-      const meanY = sum / (i + 1);
+      const meanY = cumSum2 / (i + 1);
       const varY = sumSq / (i + 1) - meanY * meanY;
       const se = Math.sqrt(varY / (i + 1));
       // convert standard error to π scale
@@ -253,11 +258,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Hook up input, method change, pause/resume and animation button
-  inputEl.addEventListener('input', () => update(+inputEl.value));
-  methodEl.addEventListener('change', () => {
-    update(+inputEl.value);
-    gpuControls.style.display = methodEl.value === 'gpuGrid' ? 'flex' : 'none';
-  });
+  // Disable auto-update: user must enter N and click Animate to start
+  pauseBtn.disabled = true;
   batchSlider.addEventListener(
     'input',
     () => (batchLabel.textContent = batchSlider.value)
@@ -266,10 +268,10 @@ document.addEventListener('DOMContentLoaded', () => {
     isPaused = !isPaused;
     pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
   });
-  document
-    .getElementById('animateBtn')
-    .addEventListener('click', () => animate(+inputEl.value));
-  update(+inputEl.value || 0);
+  document.getElementById('animateBtn').addEventListener('click', () => {
+    const total = +inputEl.value;
+    if (total > 0) animate(total);
+  });
 
   /**
    * Animate streaming sampling via Web Worker.
@@ -278,37 +280,36 @@ document.addEventListener('DOMContentLoaded', () => {
   function animate(total) {
     // clear existing charts
     g.selectAll('circle').remove();
-    convSvg.selectAll('.area, .line').remove();
+    convSvg.select('.area').datum([]).attr('d', '');
+    convSvg.select('.line').datum([]).attr('d', '');
     varSvg.selectAll('.bar').remove();
     piEl.textContent = '...';
 
-    const isGPU = methodEl.value === 'gpuGrid';
-    // GPU grid sampling is a one-shot operation, not streamed via worker
-    if (isGPU) {
-      const n = +gpuN.value;
-      const t0 = performance.now();
-      update(n);
-      gpuTime.textContent = Math.round(performance.now() - t0);
-      pauseBtn.disabled = true;
-      return;
-    }
-    // Streaming CPU-based sampling via Web Worker
-    pauseBtn.disabled = false;
-    const worker = new Worker('js/worker.js', { type: 'module' });
+    // CPU-based streaming in batches via setInterval
+    const methodKey = methodEl.value;
     const batchSize = +batchSlider.value;
     let cumPointsLocal = [];
-    let startTime;
+    let cumValuesLocal = [];
+    let count = 0;
+    // initialize pause button
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = 'Pause';
+    isPaused = false;
 
-    worker.onmessage = (e) => {
-      const { points, values, done } = e.data;
-      if (done) {
-        worker.terminate();
-        return;
+    const timer = setInterval(() => {
+      if (!isPaused) {
+        const step = Math.min(batchSize, total - count);
+        if (step > 0) {
+          const { points, values } = simulate(methodKey, step);
+          cumPointsLocal = cumPointsLocal.concat(points);
+          cumValuesLocal = cumValuesLocal.concat(values);
+          update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
+          count += step;
+        }
+        if (count >= total) {
+          clearInterval(timer);
+        }
       }
-      cumPointsLocal = cumPointsLocal.concat(points);
-      if (!isPaused) update(cumPointsLocal.length);
-      if (!startTime) startTime = performance.now();
-    };
-    worker.postMessage({ methodKey: methodEl.value, total, batchSize });
+    }, 0);
   }
 });
