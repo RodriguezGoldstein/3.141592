@@ -93,18 +93,21 @@ body {
   <div class="layout">
     <div class="sidebar">
       <h1>Monte Carlo π Simulation</h1>
-      <label>Number of simulations:
+      <label>No. Simulations:
         <input type="number" id="nValue" min="0" max="100000" step="100">
         <span id="nValue-value"></span>
       </label>
+      <br>
       <label>Batch size:
         <input type="range" id="batchSize" min="1" max="1000" step="1" value="100">
         <span id="batchSize-value"></span>
       </label>
-      <label>Animation speed (ms):
+      <br>
+      <label>Speed (ms):
         <input type="range" id="speedSlider" min="10" max="1000" step="10" value="100">
         <span id="speedValue"></span>
       </label>
+      <br>
       <label>Method:
         <select id="methodSelect">
           <option value="quarter">Quarter Circle</option>
@@ -112,11 +115,12 @@ body {
         </select>
       </label>
       <button id="animateBtn">Animate</button>
+      <h3>π ≈ <span id="pi"></span></h3>
+      <br>
       <div class="legend">
         <div class="legend-item"><span class="legend-box" style="background: blue"></span>Inside</div>
         <div class="legend-item"><span class="legend-box" style="background: red"></span>Outside</div>
       </div>
-      <h3>π ≈ <span id="pi"></span></h3>
     </div>
     <div class="column">
       <div class="chart-container"><h4>Scatter Plot</h4><div id="scatter"></div></div>
