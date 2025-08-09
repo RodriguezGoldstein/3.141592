@@ -22,7 +22,7 @@ npm start
 - Enter **Number of simulations** and click **Animate** to start the simulation stream.
 - Click **Pause** to freeze updates, **Resume** to continue.
 - Adjust **Batch size** to trade off animation smoothness vs. UI responsiveness.
-- When using **GPU Grid Sampling**, set the grid dimension (N×N) and observe the GPU execution time.
+- Click **Animate** after setting the number of simulations and batch size to start; plots do not update automatically.
 
 ## Project structure
 

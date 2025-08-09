@@ -9,9 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const piEl = document.getElementById('pi');
   const nValEl = document.getElementById('nValue-value');
   const pauseBtn = document.getElementById('pauseBtn');
-  const batchSlider = document.getElementById('batchSize');
-  const batchLabel = document.getElementById('batchSize-value');
-  let isPaused = false;
 
   // Chart dimensions and margins
   const margin = { top: 20, right: 15, bottom: 60, left: 60 };
@@ -234,7 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update variance/comparison bar chart (standard error per method)
     const seData = methodKeys.map((key) => {
-      const { values: vals } = simulate(key, N);
+      const curN = values.length;
+      const { values: vals } = simulate(key, curN);
       const sumVal = d3.sum(vals);
       const sumSqVal = d3.sum(vals.map((v) => v * v));
       const varY = sumSqVal / vals.length - (sumVal / vals.length) ** 2;
@@ -257,59 +255,13 @@ document.addEventListener('DOMContentLoaded', () => {
       .attr('height', (d) => convHeight - yBar(d.se));
   }
 
-  // Hook up input, method change, pause/resume and animation button
-  // Disable auto-update: user must enter N and click Animate to start
+  // User must enter N and click Animate to run a single batch
   pauseBtn.disabled = true;
-  batchSlider.addEventListener(
-    'input',
-    () => (batchLabel.textContent = batchSlider.value)
-  );
-  pauseBtn.addEventListener('click', () => {
-    isPaused = !isPaused;
-    pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
-  });
   document.getElementById('animateBtn').addEventListener('click', () => {
     const total = +inputEl.value;
-    if (total > 0) animate(total);
+    if (total > 0) {
+      const { points, values } = simulate(methodEl.value, total);
+      update(undefined, { points, values });
+    }
   });
-
-  /**
-   * Animate streaming sampling via Web Worker.
-   * @param {number} total - total samples to generate
-   */
-  function animate(total) {
-    // clear existing charts
-    g.selectAll('circle').remove();
-    convSvg.select('.area').datum([]).attr('d', '');
-    convSvg.select('.line').datum([]).attr('d', '');
-    varSvg.selectAll('.bar').remove();
-    piEl.textContent = '...';
-
-    // CPU-based streaming in batches via setInterval
-    const methodKey = methodEl.value;
-    const batchSize = +batchSlider.value;
-    let cumPointsLocal = [];
-    let cumValuesLocal = [];
-    let count = 0;
-    // initialize pause button
-    pauseBtn.disabled = false;
-    pauseBtn.textContent = 'Pause';
-    isPaused = false;
-
-    const timer = setInterval(() => {
-      if (!isPaused) {
-        const step = Math.min(batchSize, total - count);
-        if (step > 0) {
-          const { points, values } = simulate(methodKey, step);
-          cumPointsLocal = cumPointsLocal.concat(points);
-          cumValuesLocal = cumValuesLocal.concat(values);
-          update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
-          count += step;
-        }
-        if (count >= total) {
-          clearInterval(timer);
-        }
-      }
-    }, 0);
-  }
 });
