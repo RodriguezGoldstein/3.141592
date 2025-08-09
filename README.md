@@ -2,6 +2,19 @@
 
 This interactive demo estimates the value of π using a Monte Carlo approach and D3.js for visualization.
 
+## Overview
+
+We approximate π by sampling points in the unit square [0, 1]×[0, 1] and checking how many fall inside the quarter circle of radius 1.  The ratio of inside‐circle points to total points, multiplied by 4, converges to π as the sample size grows.
+
+The demo presents two sampling methods:
+- **Quarter Circle Monte Carlo**: uniform random (x, y) samples in the square.
+- **Quasi‑Monte Carlo (Halton sequence)**: low‑discrepancy sequence that more evenly covers the square, typically yielding faster convergence.
+
+Visualization components include:
+- **Scatter Plot** of sampled points (blue = inside, red = outside).
+- **Convergence Plot** showing the running π estimate with ±1σ/√N error bands.
+- **Std. Error Comparison** bar chart comparing final standard error across methods.
+
 ## How to run
 
 You must serve this demo over HTTP (ES modules & module workers won’t run from file://):
