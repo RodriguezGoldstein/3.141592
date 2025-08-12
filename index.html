@@ -215,24 +215,44 @@ body {
       const yAxis = d3.axisLeft(yScale);
       mainG.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height})`).call(xAxis);
       mainG.append('g').attr('class', 'y-axis').call(yAxis);
-      const g = mainG.append('g');
-      // Quarter-circle overlay (draw once)
+      // content group that will be transformed together
+      const contentG = mainG.append('g').attr('class', 'content');
+      const pointsG = contentG.append('g');
+      // Quarter-circle overlay (draw once) inside contentG
       const quarterPts = d3.range(0, Math.PI / 2 + 0.001, Math.PI / 180).map((t) => [Math.cos(t), Math.sin(t)]);
       const circleLine = (xFn, yFn) => d3.line().x((d) => xFn(d[0])).y((d) => yFn(d[1]));
-      mainG.append('path').datum(quarterPts).attr('class', 'quarter-circle').attr('d', circleLine(xScale, yScale)).style('stroke', '#333').style('fill', 'none');
+      contentG.append('path').datum(quarterPts).attr('class', 'quarter-circle').attr('d', circleLine(xScale, yScale)).style('stroke', '#333').style('fill', 'none');
 
-      // Zoom behavior for scatter
+      // Zoom behavior for scatter (attach to overlay rect inside plotting area)
       const zoom = d3.zoom().scaleExtent([1, 40]).on('zoom', zoomed);
-      svg.call(zoom);
+      // clip path so content doesn't draw outside plot area (defs inside mainG so coords align)
+      mainG.append('defs').append('clipPath').attr('id', 'clip-scatter').append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+      contentG.attr('clip-path', 'url(#clip-scatter)');
+
+      // draw overlay (on top) to capture zoom and pointer events
+      const overlay = mainG
+        .append('rect')
+        .attr('class', 'zoom-rect')
+        .attr('width', width)
+        .attr('height', height)
+        .style('fill', 'none')
+        .style('pointer-events', 'all');
+      overlay.call(zoom);
+
+      // ensure axes are rendered above the plotted content, but keep the overlay on top
+      mainG.selectAll('.x-axis,.y-axis').raise();
+      overlay.raise();
       function zoomed(event) {
         const t = event.transform;
         const zx = t.rescaleX(xScale);
         const zy = t.rescaleY(yScale);
         mainG.select('.x-axis').call(d3.axisBottom(zx));
         mainG.select('.y-axis').call(d3.axisLeft(zy));
-        mainG.selectAll('circle').attr('cx', (d) => zx(d[0])).attr('cy', (d) => zy(d[1]));
-        // update quarter-circle to transformed coordinates
-        mainG.select('.quarter-circle').attr('d', circleLine(zx, zy)(quarterPts));
+        // Reposition plotted content using rescaled scales so clipping works consistently.
+        pointsG.selectAll('circle').attr('cx', (d) => zx(d[0])).attr('cy', (d) => zy(d[1]));
+        // redraw quarter-circle path using rescaled axes
+        const circleLineRescaled = d3.line().x((d) => zx(d[0])).y((d) => zy(d[1]));
+        contentG.select('.quarter-circle').attr('d', circleLineRescaled(quarterPts));
       }
 
       // tooltip div (shared)
@@ -249,6 +269,9 @@ body {
         .attr('role', 'img')
         .attr('aria-label', 'Convergence chart');
       const convSvg = convSvgOuter.append('g').attr('transform', `translate(${convMargin.left},${convMargin.top})`);
+      // clip for convergence plotting area so area/line do not overlap axes when zoomed
+      convSvgOuter.append('defs').append('clipPath').attr('id', 'clip-conv').append('rect').attr('x', 0).attr('y', 0).attr('width', convWidth).attr('height', convHeight);
+      const convContent = convSvg.append('g').attr('class', 'conv-content').attr('clip-path', 'url(#clip-conv)');
       const xConv = d3.scaleLinear().range([0, convWidth]);
       const yConv = d3.scaleLinear().range([convHeight, 0]);
       const xAxisConv = d3.axisBottom(xConv);
@@ -277,17 +300,21 @@ body {
         .line()
         .x((d, i) => xConv(i + 1))
         .y((d) => yConv(d));
-      convSvg
+      convContent
         .append('path')
         .attr('class', 'area')
         .style('fill', 'lightsteelblue')
         .style('opacity', 0.3);
-      convSvg
+      convContent
         .append('path')
         .attr('class', 'line')
         .style('fill', 'none')
         .style('stroke', 'steelblue')
         .style('stroke-width', 1.5);
+      // bring axes above the content (so the area/line do not overlap ticks/labels)
+      convSvg.selectAll('.x-axis,.y-axis').raise();
+
+      
       // π reference line
       convSvg.append('line').attr('class', 'pi-line').style('stroke', 'darkgreen').style('stroke-dasharray', '4,4');
 
@@ -353,7 +380,7 @@ body {
 
         // If no data points, clear charts and exit to avoid NaN issues
         if (values.length === 0) {
-          g.selectAll('circle').remove();
+          pointsG.selectAll('circle').remove();
           convSvg.select('.area').datum([]).attr('d', '');
           convSvg.select('.line').datum([]).attr('d', '');
           varSvg.selectAll('.bar').remove();
@@ -362,64 +389,60 @@ body {
         }
 
         // Scatter plot (only if 2D points available)
-        const scatter = g.selectAll('circle').data(points);
+        const scatter = pointsG.selectAll('circle').data(points);
         scatter.exit().remove();
         const enter = scatter
           .enter()
           .append('circle')
-          .attr('cx', (d) => xScale(d[0]))
-          .attr('cy', (d) => yScale(d[1]))
           .attr('r', 2)
           .style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
+        // if zoom transform present, position points with rescaled axes so they line up with current view
+        const t = d3.zoomTransform(overlay.node());
+        const zx = t.rescaleX(xScale);
+        const zy = t.rescaleY(yScale);
         // merge and set positions for all immediately (no transition)
-        scatter.merge(enter).attr('cx', (d) => xScale(d[0])).attr('cy', (d) => yScale(d[1])).attr('r', 2).style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
-        // tooltips
-        g.selectAll('circle')
-          .on('mouseover', function (event, d) {
+        scatter.merge(enter).attr('cx', (d) => zx(d[0])).attr('cy', (d) => zy(d[1])).attr('r', 2).style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
+        // scatter tooltip: handled by overlay (overlay is on top to capture zoom)
+        overlay.on('mousemove', function (event) {
+          const pts = points; // closed-over points array
+          if (!pts || pts.length === 0) { tooltip.style('opacity', 0); return; }
+          const p = d3.pointer(event, overlay.node());
+          const t = d3.zoomTransform(overlay.node());
+          const zx = t.rescaleX(xScale);
+          const zy = t.rescaleY(yScale);
+          // find nearest point in screen coords
+          let best = null;
+          let bestDist = Infinity;
+          for (let i = 0; i < pts.length; i++) {
+            const sx = zx(pts[i][0]);
+            const sy = zy(pts[i][1]);
+            const dx = sx - p[0];
+            const dy = sy - p[1];
+            const ds = dx * dx + dy * dy;
+            if (ds < bestDist) { bestDist = ds; best = { d: pts[i], sx, sy }; }
+          }
+          // show tooltip if within ~8px
+          if (best && Math.sqrt(bestDist) < 8) {
+            const d = best.d;
             const inside = d[0] * d[0] + d[1] * d[1] < 1;
-            tooltip.transition().duration(100).style('opacity', 0.95);
-            tooltip.html(`x: ${d[0].toFixed(3)}<br/>y: ${d[1].toFixed(3)}<br/>${inside ? 'Inside' : 'Outside'}`)
-              .style('left', event.pageX + 8 + 'px')
-              .style('top', event.pageY + 8 + 'px');
-          })
-          .on('mousemove', function (event) {
-            tooltip.style('left', event.pageX + 8 + 'px').style('top', event.pageY + 8 + 'px');
-          })
-          .on('mouseout', function () {
+            tooltip.style('opacity', 1).html(`<strong>x:</strong> ${d[0].toFixed(3)}<br/><strong>y:</strong> ${d[1].toFixed(3)}<br/>${inside ? '<strong>Inside</strong>' : '<strong>Outside</strong>'}`)
+              .style('left', (event.pageX + 10) + 'px')
+              .style('top', (event.pageY + 10) + 'px');
+          } else {
             tooltip.style('opacity', 0);
-          });
+          }
+        }).on('mouseleave', () => tooltip.style('opacity', 0));
         // attach reset zoom control (reset both scatter and convergence)
         const resetBtn = document.getElementById('resetZoomBtn');
         if (resetBtn) {
           resetBtn.onclick = () => {
-            svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity);
-            convSvgOuter.transition().duration(200).call(zoomConv.transform, d3.zoomIdentity);
+            overlay.transition().duration(200).call(zoom.transform, d3.zoomIdentity);
+            overlayConv.transition().duration(200).call(zoomConv.transform, d3.zoomIdentity);
           };
         }
-        // double-click on scatter svg to reset zoom
-        svg.on('dblclick', () => svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity));
-        // double-click on convergence svg to reset its zoom
-        convSvgOuter.on('dblclick', () => convSvgOuter.transition().duration(200).call(zoomConv.transform, d3.zoomIdentity));
+        // double-click handlers for overlays are attached once after overlays are created
 
-        // Convergence tooltip: show nearest iteration values
-        convSvgOuter.on('mousemove', function (event) {
-          if (latestCumEst.length === 0) { tooltip.style('opacity', 0); return; }
-          const pt = d3.pointer(event, convSvg.node());
-          const t = d3.zoomTransform(convSvgOuter.node());
-          const zx = t.rescaleX(xConv);
-          const zy = t.rescaleY(yConv);
-          const iter = Math.round(zx.invert(pt[0]));
-          if (iter < 1 || iter > latestCumEst.length) { tooltip.style('opacity', 0); return; }
-          const idx = iter - 1;
-          const est = latestCumEst[idx];
-          const low = latestLower[idx];
-          const up = latestUpper[idx];
-          tooltip.style('opacity', 1).html(
-            `<strong>Iteration:</strong> ${iter}<br>` +
-            `<strong>Estimate:</strong> ${est.toFixed(6)}<br>` +
-            `<strong>Lower:</strong> ${low.toFixed(6)} &nbsp; <strong>Upper:</strong> ${up.toFixed(6)}`
-          ).style('left', (event.pageX + 10) + 'px').style('top', (event.pageY + 10) + 'px');
-        }).on('mouseleave', () => tooltip.style('opacity', 0));
+        // Convergence tooltip: handled on the convergence overlay (attached below)
 
         // Variance bars tooltip will be attached after bars are rendered below
 
@@ -516,8 +539,37 @@ body {
 
       // Zoom behavior for convergence chart (pan/zoom for x and y)
       const zoomConv = d3.zoom().scaleExtent([1, 40]).on('zoom', zoomedConv);
-      const convOuter = convSvgOuter; // alias
-      convOuter.call(zoomConv);
+      // attach an overlay rect inside convSvg for zoom capture
+      const overlayConv = convSvg
+        .append('rect')
+        .attr('class', 'zoom-rect')
+        .attr('width', convWidth)
+        .attr('height', convHeight)
+        .style('fill', 'none')
+        .style('pointer-events', 'all');
+      overlayConv.call(zoomConv);
+      // attach dblclick reset handlers for overlays
+      overlay.on('dblclick', () => overlay.transition().duration(200).call(zoom.transform, d3.zoomIdentity));
+      overlayConv.on('dblclick', () => overlayConv.transition().duration(200).call(zoomConv.transform, d3.zoomIdentity));
+      // convergence tooltip handlers attached to overlayConv so they use the overlay's zoom transform
+      overlayConv.on('mousemove', function (event) {
+        if (latestCumEst.length === 0) { tooltip.style('opacity', 0); return; }
+        const pt = d3.pointer(event, convSvg.node());
+        const t = d3.zoomTransform(overlayConv.node());
+        const zx = t.rescaleX(xConv);
+        const zy = t.rescaleY(yConv);
+        const iter = Math.round(zx.invert(pt[0]));
+        if (iter < 1 || iter > latestCumEst.length) { tooltip.style('opacity', 0); return; }
+        const idx = iter - 1;
+        const est = latestCumEst[idx];
+        const low = latestLower[idx];
+        const up = latestUpper[idx];
+        tooltip.style('opacity', 1).html(
+          `<strong>Iteration:</strong> ${iter}<br>` +
+          `<strong>Estimate:</strong> ${est.toFixed(6)}<br>` +
+          `<strong>Lower:</strong> ${low.toFixed(6)} &nbsp; <strong>Upper:</strong> ${up.toFixed(6)}`
+        ).style('left', (event.pageX + 10) + 'px').style('top', (event.pageY + 10) + 'px');
+      }).on('mouseleave', () => tooltip.style('opacity', 0));
       function zoomedConv(event) {
         const t = event.transform;
         const zx = t.rescaleX(xConv);
@@ -547,7 +599,7 @@ body {
     // clear any prior animation
     if (timer) clearInterval(timer);
     // reset charts
-    g.selectAll('circle').remove();
+    pointsG.selectAll('circle').remove();
     convSvg.select('.area').datum([]).attr('d', '');
     convSvg.select('.line').datum([]).attr('d', '');
     varSvg.selectAll('.bar').remove();
