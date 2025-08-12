@@ -1,437 +1,458 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Monte Carlo Option Pricing — Self‑Contained Demo (D3)</title>
+  <meta charset="utf-8">
+  <title>Standalone Pi Monte Carlo Simulation</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
   <style>
-    :root{--gap:12px}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto; margin:20px; color:#111}
-    .grid{display:grid; gap:var(--gap); grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
-    .card{border:1px solid #ddd; border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(0,0,0,.05); background:#fff}
-    .row{display:flex; gap:var(--gap); align-items:end; flex-wrap:wrap}
-    label{display:block; font-size:12px; color:#555; margin-bottom:4px}
-    input,select,textarea{width:100%; padding:8px; border:1px solid #ccc; border-radius:8px}
-    button{padding:10px 14px; border:0; border-radius:10px; background:#111; color:#fff; cursor:pointer}
-    button.secondary{background:#444}
-    pre{white-space:pre-wrap}
-    svg.chart{display:block; width:100%; height:340px; border-radius:10px; background:#fafafa; overflow:hidden; touch-action:none}
-    textarea{resize:vertical; overflow:auto}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    .legend{display:flex; flex-wrap:wrap; gap:8px; font-size:12px; color:#444; align-items:center}
-    .sw{width:12px; height:12px; border-radius:3px; display:inline-block; margin-right:6px}
-    .sw.blue{background:#4b9ce2}
-    .sw.black{background:#111}
-    .sw.red{background:#ef4444}
-    .sw.gray{background:#777}
-    .hint{font-size:12px; color:#666}
-    .tooltip{position:fixed; pointer-events:none; background:rgba(0,0,0,.8); color:#fff; padding:6px 8px; border-radius:6px; font-size:12px; line-height:1.2; transform:translate(8px,8px); z-index:9999}
+body {
+  font: 11px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.dot {
+  stroke: #000;
+}
+
+.tooltip {
+  position: absolute;
+  width: 200px;
+  height: 28px;
+  pointer-events: none;
+}
+
+/* Overall three-column layout: sidebar, scatter, and two charts */
+.layout {
+  display: flex;
+  gap: 20px;
+  padding: 10px;
+}
+/* Sidebar column */
+.sidebar {
+  flex: 0 0 260px;
+  padding: 10px;
+  border-right: 1px solid #ccc;
+}
+/* Scatter and others columns */
+.column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Individual chart container stretches */
+.chart-container {
+  flex: 1;
+}
+/* Chart titles */
+.chart-container h4 {
+  text-align: center;
+  margin: 0 0 5px;
+  font-size: 1em;
+}
+
+/* Controls layout */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+/* GPU controls timing display */
+#gpuControls span {
+  margin-left: 10px;
+  font-weight: bold;
+}
+
+/* Legend styling */
+.legend {
+  display: flex;
+  gap: 15px;
+  padding: 5px 10px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-box {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #000;
+}
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body>
-  <h1>Monte Carlo Option Pricing — Self‑Contained (D3)</h1>
-  <div class="grid">
-    <div class="card">
-      <div class="row">
-        <div style="flex:1"><label for="optType">Type</label><select id="optType"><option>call</option><option>put</option></select></div>
-        <div style="flex:1"><label for="S0">S₀</label><input id="S0" type="number" value="100" step="1"></div>
-        <div style="flex:1"><label for="K">K</label><input id="K" type="number" value="100" step="1"></div>
-        <div style="flex:1"><label for="r">r</label><input id="r" type="number" value="0.03" step="0.001"></div>
-        <div style="flex:1"><label for="sigma">σ</label><input id="sigma" type="number" value="0.25" step="0.01"></div>
-        <div style="flex:1"><label for="T">T (yrs)</label><input id="T" type="number" value="0.5" step="0.05"></div>
+  <div class="layout">
+    <div class="sidebar">
+      <h1>Monte Carlo π Simulation</h1>
+      <label>No. Simulations:
+        <input type="number" id="nValue" min="0" max="100000" step="100">
+        <span id="nValue-value"></span>
+      </label>
+      <br>
+      <label>Batch size:
+        <input type="range" id="batchSize" min="1" max="1000" step="1" value="100">
+        <span id="batchSize-value"></span>
+      </label>
+      <br>
+      <label>Speed (ms):
+        <input type="range" id="speedSlider" min="10" max="1000" step="10" value="100">
+        <span id="speedValue"></span>
+      </label>
+      <br>
+      <label>Method:
+        <select id="methodSelect">
+          <option value="quarter">Quarter Circle</option>
+          <option value="quasi">Quasi‑MC</option>
+        </select>
+      </label>
+      <button id="animateBtn">Animate</button>
+      <h3>π ≈ <span id="pi"></span></h3>
+      <br>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-box" style="background: blue"></span>Inside</div>
+        <div class="legend-item"><span class="legend-box" style="background: red"></span>Outside</div>
       </div>
-      <div class="row" style="margin-top:var(--gap)">
-        <div style="flex:1"><label for="steps">steps</label><input id="steps" type="number" value="128" step="1"></div>
-        <div style="flex:1"><label for="paths">paths</label><input id="paths" type="number" value="80000" step="1000"></div>
-        <div style="flex:1"><label for="seed">seed</label><input id="seed" type="number" value="12345" step="1"></div>
-        <div style="flex:1"><label for="cv">control variate</label><select id="cv"><option value="1" selected>on</option><option value="0">off</option></select></div>
-        <div style="flex:1"><label for="bsRisk">BS model‑risk CI (%)</label><input id="bsRisk" type="number" value="5" step="0.5"></div>
-      </div>
-      <div class="row" style="margin-top:var(--gap)">
-        <div style="flex:1">
-          <label for="antithetic">antithetic variates</label>
-          <select id="antithetic"><option value="1" selected>on</option><option value="0">off</option></select>
-        </div>
-        <div style="flex:1">
-          <label for="pathsLog">paths: log‑scale</label>
-          <select id="pathsLog"><option value="0" selected>off</option><option value="1">on</option></select>
-        </div>
-        <div style="flex:1">
-          <label for="payoffLog">payoff diagram: log S axis</label>
-          <select id="payoffLog"><option value="0" selected>off</option><option value="1">on</option></select>
-        </div>
-        <div><button id="runBtn">Run Simulation</button></div>
-      </div>
-      <div class="hint" style="margin-top:8px">Zoom: mouse‑wheel; pan: drag; double‑click: reset. (Charts powered by D3.)</div>
     </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center">
-        <div><strong>Results</strong></div>
-        <div class="legend">
-          <span class="sw blue"></span>Histogram Bars
-          <span class="sw black"></span>Estimator/Payoff Curve
-          <span class="sw red"></span>Simulated Points (S_T, payoff)
-          <span class="sw gray" style="background:rgba(75,156,226,0.6)"></span>Price Paths
-        </div>
-      </div>
-      <pre class="mono" id="stats">(run to compute)</pre>
+    <div class="column">
+      <div class="chart-container"><h4>Scatter Plot</h4><div id="scatter"></div></div>
     </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center">
-        <strong>Discounted Payoff Distribution</strong>
-      </div>
-      <svg id="hist" class="chart"></svg>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center">
-        <strong>Estimator Comparison</strong>
-      </div>
-      <svg id="bars" class="chart"></svg>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center">
-        <strong>Simulated Price Paths (subset)</strong>
-      </div>
-      <svg id="pathsChart" class="chart"></svg>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center">
-        <strong>Payoff Diagram at Expiry</strong>
-      </div>
-      <svg id="payoffDiagram" class="chart"></svg>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between; align-items:center">
-        <strong>Diagnostics</strong>
-        <button id="runDiag" class="secondary">Run Diagnostics</button>
-      </div>
-      <textarea id="diag" class="mono" rows="12" readonly>(run diagnostics)</textarea>
+    <div class="column">
+      <div class="chart-container"><h4>Convergence Plot</h4><div id="convergence"></div></div>
+      <div class="chart-container"><h4>Std. Error Comparison</h4><div id="variance"></div></div>
     </div>
   </div>
-
   <script>
-  // All JS runs after DOMContentLoaded to avoid missing elements.
-  document.addEventListener('DOMContentLoaded', function(){
-    const $ = (id) => document.getElementById(id) || null;
-    const bind = (id, evt, handler) => { const el=$(id); if(!el||!el.addEventListener){ console.error(`[fatal] bind ${evt} #${id}`); return false;} el.addEventListener(evt,handler,{passive:false}); return true; };
-
-    // tooltip (shared)
-    function createTooltip(){
-      let div=d3.select('body').append('div').attr('class','tooltip').style('opacity',0);
-      function show(html, evt){ div.html(html).style('opacity',1).style('left', (evt.clientX+10)+'px').style('top',(evt.clientY+10)+'px'); }
-      function hide(){ div.style('opacity',0); }
-      return {div, show, hide};
-    }
-    const tooltip = createTooltip();
-
-    // --------- readers (defensive) ---------
-    const readSelect = (id, fallback) => { const el=$(id); const v=el && el.value; return (v===undefined||v===null||v==='')? fallback : v; };
-    const readNum = (id, fallback) => { const el=$(id); const v = el? parseFloat(el.value) : NaN; return Number.isFinite(v)? v : fallback; };
-    const readInt = (id, fallback) => { const el=$(id); const v = el? parseInt(el.value,10) : NaN; return Number.isFinite(v)? v : fallback; };
-
-    // ---------- Maths & Finance ----------
-    const C=Math; const isFiniteNumber = x => typeof x==='number' && Number.isFinite(x);
-    function cdfN(x){ const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911; const s=x<0?-1:1, ax=C.abs(x)/C.sqrt(2), t=1/(1+p*ax); const y=1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*C.exp(-ax*ax); return 0.5*(1+s*y);} 
-    const pdfN = x => (1/C.sqrt(2*C.PI))*C.exp(-0.5*x*x);
-    function BS(S,K,r,sig,T,type){ const d1=(C.log(S/K)+(r+0.5*sig*sig)*T)/(sig*C.sqrt(T)); const d2=d1-sig*C.sqrt(T); return type==='call'? S*cdfN(d1)-K*C.exp(-r*T)*cdfN(d2) : K*C.exp(-r*T)*cdfN(-d2)-S*cdfN(-d1); }
-    function BSGreeks(S,K,r,sig,T,type){ const d1=(C.log(S/K)+(r+0.5*sig*sig)*T)/(sig*C.sqrt(T)); const d2=d1-sig*C.sqrt(T); const Nd1=cdfN(d1), Nd2=cdfN(d2), nd1=pdfN(d1); let delta,theta,rho; if(type==='call'){ delta=Nd1; theta=-(S*nd1*sig)/(2*C.sqrt(T))-r*K*C.exp(-r*T)*Nd2; rho=K*T*C.exp(-r*T)*Nd2;} else { delta=Nd1-1; theta=-(S*nd1*sig)/(2*C.sqrt(T))+r*K*C.exp(-r*T)*cdfN(-d2); rho=-K*T*C.exp(-r*T)*cdfN(-d2);} const gamma=nd1/(S*sig*C.sqrt(T)); const vega=S*nd1*C.sqrt(T); return {Delta:delta, Gamma:gamma, Vega:vega, 'Theta (per year)':theta, Rho:rho}; }
-
-    function makeLCG(seed){ let s=(seed>>>0)||1; return ()=>((s=(1664525*s+1013904223)>>>0),(s>>>0)/0x100000000); }
-    function normalBM(rng){ let u=0,v=0; while(u===0)u=rng(); while(v===0)v=rng(); return C.sqrt(-2*C.log(u))*C.cos(2*C.PI*v); }
-
-    function sanitize(p){ return { type:p.type==='put'?'put':'call', S0:isFiniteNumber(p.S0)?p.S0:100, K:isFiniteNumber(p.K)?p.K:100, r:isFiniteNumber(p.r)?p.r:0.03, sigma:C.max(0,isFiniteNumber(p.sigma)?p.sigma:0.2), T:C.max(1e-8,isFiniteNumber(p.T)?p.T:0.5), steps:C.max(1,(p.steps|0)||64), paths:C.max(10,(p.paths|0)||20000), seed:C.max(1,(p.seed|0)||1) }; }
-
-    function simulateMC(params,useAntithetic){ const p=sanitize(params); const dt=p.T/p.steps, disc=C.exp(-p.r*p.T), rng=makeLCG(p.seed); const N=useAntithetic?(p.paths+(p.paths%2)):p.paths; const pay=new Float64Array(N), dST=new Float64Array(N), ST=new Float64Array(N), Zbar=new Float64Array(N); const sdt=C.sqrt(dt), drift=(p.r-0.5*p.sigma*p.sigma)*dt, vol=p.sigma*sdt; for(let i=0;i<N;){ let S1=p.S0, zsum1=0; const zs=[]; for(let t=0;t<p.steps;t++){ const z=normalBM(rng); zs.push(z); zsum1+=z; S1*=C.exp(drift+vol*z);} let S2=p.S0, zsum2=0; for(let t=0;t<p.steps;t++){ const z=-zs[t]; zsum2+=z; S2*=C.exp(drift+vol*z);} const po1=p.type==='call'?C.max(S1-p.K,0):C.max(p.K-S1,0); const po2=p.type==='call'?C.max(S2-p.K,0):C.max(p.K-S2,0); pay[i]=disc*po1; dST[i]=disc*S1; ST[i]=S1; Zbar[i]=zsum1/C.sqrt(p.steps); i++; if(i<N){ pay[i]=disc*po2; dST[i]=disc*S2; ST[i]=S2; Zbar[i]=zsum2/C.sqrt(p.steps); i++; } } const n=p.paths; const payS=pay.slice(0,n), dSTS=dST.slice(0,n), STS=ST.slice(0,n), ZS=Zbar.slice(0,n); let sum=0; for(let i=0;i<n;i++) sum+=payS[i]; const mean=sum/n; let vs=0; for(let i=0;i<n;i++){ const d=payS[i]-mean; vs+=d*d;} const se=C.sqrt(vs/C.max(1,n-1))/C.sqrt(n), ciLow=mean-1.96*se, ciHigh=mean+1.96*se; return [mean,se,ciLow,ciHigh, payS,dSTS,STS,ZS,p]; }
-
-    // ---------- Web Worker (Blob) for simulateMC ----------
-    // create a Blob-based worker that runs simulateMC off the main thread
-    let mcWorker = null;
-    let workerAvailable = false;
-    try{
-      const workerCode = [
-        "function makeLCG(seed){ let s=(seed>>>0)||1; return function(){ s=(1664525*s+1013904223)>>>0; return (s>>>0)/0x100000000; }; }",
-        "function normalBM(rng){ var u=0,v=0; while(u===0) u=rng(); while(v===0) v=rng(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }",
-        "function sanitize(p){ return { type:p.type==='put'?'put':'call', S0:(typeof p.S0==='number'&&isFinite(p.S0))?p.S0:100, K:(typeof p.K==='number'&&isFinite(p.K))?p.K:100, r:(typeof p.r==='number'&&isFinite(p.r))?p.r:0.03, sigma:Math.max(0,(typeof p.sigma==='number'&&isFinite(p.sigma))?p.sigma:0.2), T:Math.max(1e-8,(typeof p.T==='number'&&isFinite(p.T))?p.T:0.5), steps:Math.max(1, (p.steps|0)||64), paths:Math.max(10,(p.paths|0)||20000), seed:Math.max(1,(p.seed|0)||1) }; }",
-        "function simulateMC(params,useAntithetic){ var p=sanitize(params); var dt=p.T/p.steps, disc=Math.exp(-p.r*p.T), rng=makeLCG(p.seed); var N=useAntithetic?(p.paths+(p.paths%2)):p.paths; var pay=new Float64Array(N), dST=new Float64Array(N), ST=new Float64Array(N), Zbar=new Float64Array(N); var sdt=Math.sqrt(dt), drift=(p.r-0.5*p.sigma*p.sigma)*dt, vol=p.sigma*sdt; for(var i=0;i<N;){ var S1=p.S0, zsum1=0, zs=[]; for(var t=0;t<p.steps;t++){ var z=normalBM(rng); zs.push(z); zsum1+=z; S1*=Math.exp(drift+vol*z);} var S2=p.S0, zsum2=0; for(var t=0;t<p.steps;t++){ var z=-zs[t]; zsum2+=z; S2*=Math.exp(drift+vol*z);} var po1=p.type==='call'?Math.max(S1-p.K,0):Math.max(p.K-S1,0); var po2=p.type==='call'?Math.max(S2-p.K,0):Math.max(p.K-S2,0); pay[i]=disc*po1; dST[i]=disc*S1; ST[i]=S1; Zbar[i]=zsum1/Math.sqrt(p.steps); i++; if(i<N){ pay[i]=disc*po2; dST[i]=disc*S2; ST[i]=S2; Zbar[i]=zsum2/Math.sqrt(p.steps); i++; } } var n=p.paths; var payS=pay.slice(0,n), dSTS=dST.slice(0,n), STS=ST.slice(0,n), ZS=Zbar.slice(0,n); var sum=0; for(var i=0;i<n;i++) sum+=payS[i]; var mean=sum/n; var vs=0; for(var i=0;i<n;i++){ var d=payS[i]-mean; vs+=d*d;} var se=Math.sqrt(vs/Math.max(1,n-1))/Math.sqrt(n), ciLow=mean-1.96*se, ciHigh=mean+1.96*se; return { mean:mean, se:se, ciLow:ciLow, ciHigh:ciHigh, payS:payS, dSTS:dSTS, STS:STS, ZS:ZS, p:p }; }",
-        "self.onmessage = function(e){ var data=e.data; if(!data||data.cmd!=='simulate') return; var id=data.id, params=data.params, useAnt=data.useAntithetic; try{ var res = simulateMC(params, useAnt); var transfer=[]; if(res.payS && res.payS.buffer) transfer.push(res.payS.buffer); if(res.dSTS && res.dSTS.buffer) transfer.push(res.dSTS.buffer); if(res.STS && res.STS.buffer) transfer.push(res.STS.buffer); if(res.ZS && res.ZS.buffer) transfer.push(res.ZS.buffer); self.postMessage({id:id, ok:true, result:res}, transfer); } catch(err){ self.postMessage({id:id, ok:false, error:(err&&err.message)?err.message:String(err)}); } };"
-      ].join('\n');
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      mcWorker = new Worker(URL.createObjectURL(blob));
-      workerAvailable = true;
-      mcWorker.addEventListener('error', function(e){ console.warn('[worker] error', e); workerAvailable = false; mcWorker.terminate(); mcWorker = null; });
-    }catch(e){ console.warn('worker create failed', e); workerAvailable = false; mcWorker = null; }
-
-    function simulateMCAsync(params,useAntithetic){
-      if(workerAvailable && mcWorker){
-        return new Promise((resolve,reject)=>{
-          const id = Math.random().toString(36).slice(2);
-          function onmsg(evt){ const d=evt.data; if(!d||d.id!==id) return; mcWorker.removeEventListener('message', onmsg); if(d.ok){ const r=d.result; // rewrap transferred buffers
-              try{ r.payS = r.payS && !(r.payS instanceof Float64Array) ? new Float64Array(r.payS) : r.payS; r.dSTS = r.dSTS && !(r.dSTS instanceof Float64Array) ? new Float64Array(r.dSTS) : r.dSTS; r.STS = r.STS && !(r.STS instanceof Float64Array) ? new Float64Array(r.STS) : r.STS; r.ZS = r.ZS && !(r.ZS instanceof Float64Array) ? new Float64Array(r.ZS) : r.ZS; resolve([r.mean, r.se, r.ciLow, r.ciHigh, r.payS, r.dSTS, r.STS, r.ZS, r.p]); }catch(err){ reject(err); } } else { reject(new Error(d.error || 'worker error')); } }
-          mcWorker.addEventListener('message', onmsg);
-          mcWorker.postMessage({ id:id, cmd:'simulate', params:params, useAntithetic: !!useAntithetic });
-        });
+    // Sampling methods
+    function quarter(N) {
+      const points = [];
+      const values = [];
+      for (let i = 0; i < N; i++) {
+        const x = Math.random();
+        const y = Math.random();
+        points.push([x, y]);
+        values.push(x * x + y * y < 1 ? 1 : 0);
       }
-      // fallback to main-thread simulateMC
-      return Promise.resolve(simulateMC(params,useAntithetic));
+      return { points, values };
     }
+    function halton(index, base) {
+      let result = 0, f = 1 / base, i = index;
+      while (i > 0) {
+        result += f * (i % base);
+        i = Math.floor(i / base);
+        f /= base;
+      }
+      return result;
+    }
+    function quasi(N) {
+      const points = [];
+      const values = [];
+      for (let i = 1; i <= N; i++) {
+        const x = halton(i, 2);
+        const y = halton(i, 3);
+        points.push([x, y]);
+        values.push(x * x + y * y < 1 ? 1 : 0);
+      }
+      return { points, values };
+    }
+    const methods = { quarter, quasi };
 
-    function controlVariate(pay,discST,target){ const n=pay.length; const x=new Float64Array(n); let mx=0,my=0; for(let i=0;i<n;i++){ x[i]=discST[i]-target; mx+=x[i]; my+=pay[i]; } mx/=n; my/=n; let vx=0,cov=0; for(let i=0;i<n;i++){ const dx=x[i]-mx, dy=pay[i]-my; vx+=dx*dx; cov+=dx*dy;} vx/=Math.max(1,n-1); cov/=Math.max(1,n-1); const adj=new Float64Array(n); if(vx<=0){ adj.set(pay);} else { const beta=cov/vx; for(let i=0;i<n;i++) adj[i]=pay[i]-beta*x[i]; } let s=0; for(let i=0;i<n;i++) s+=adj[i]; const mean=s/n; let vs=0; for(let i=0;i<n;i++){ const d=adj[i]-mean; vs+=d*d;} const se=Math.sqrt(vs/Math.max(1,n-1))/Math.sqrt(n), ciLow=mean-1.96*se, ciHigh=mean+1.96*se; return {mean,se,ciLow,ciHigh,samples:adj}; }
+    document.addEventListener('DOMContentLoaded', () => {
+      const inputEl = document.getElementById('nValue');
+      const methodEl = document.getElementById('methodSelect');
+      const piEl = document.getElementById('pi');
+      const nValEl = document.getElementById('nValue-value');
+      const batchSlider = document.getElementById('batchSize');
+      const batchLabel = document.getElementById('batchSize-value');
+      const speedSlider = document.getElementById('speedSlider');
+      const speedValue = document.getElementById('speedValue');
+      batchLabel.textContent = batchSlider.value;
+      speedValue.textContent = speedSlider.value;
+      batchSlider.addEventListener('input', () => (batchLabel.textContent = batchSlider.value));
+      speedSlider.addEventListener('input', () => (speedValue.textContent = speedSlider.value));
+      // reflect the user-entered simulation count in the label
+      nValEl.textContent = inputEl.value;
+      inputEl.addEventListener('input', () => (nValEl.textContent = inputEl.value));
 
-    function mcPathGreeks(p,ST,Zbar){ const disc=Math.exp(-p.r*p.T), n=ST.length, sqrtT=Math.sqrt(p.T); const indC=new Float64Array(n), indP=new Float64Array(n); for(let i=0;i<n;i++){ indC[i]=ST[i]>p.K?1:0; indP[i]=ST[i]<p.K?1:0; } const gC=indC, gP=new Float64Array(n); for(let i=0;i<n;i++) gP[i]=-indP[i]; const dS0=new Float64Array(n), dSig=new Float64Array(n), dR=new Float64Array(n); for(let i=0;i<n;i++){ dS0[i]=ST[i]/p.S0; dSig[i]=ST[i]*(-p.sigma*p.T+sqrtT*Zbar[i]); dR[i]=p.T*ST[i]; } const pC=i=>Math.max(ST[i]-p.K,0), pP=i=>Math.max(p.K-ST[i],0); const dlt=new Float64Array(n), veg=new Float64Array(n), rho=new Float64Array(n); if(p.type==='call'){ for(let i=0;i<n;i++){ dlt[i]=disc*gC[i]*dS0[i]; veg[i]=disc*gC[i]*dSig[i]; rho[i]=disc*(-p.T*pC(i)+gC[i]*dR[i]); } } else { for(let i=0;i<n;i++){ dlt[i]=disc*gP[i]*dS0[i]; veg[i]=disc*gP[i]*dSig[i]; rho[i]=disc*(-p.T*pP(i)+gP[i]*dR[i]); } } function mSe(a){ const n=a.length; let s=0; for(let i=0;i<n;i++) s+=a[i]; const m=s/n; let vs=0; for(let i=0;i<n;i++){ const d=a[i]-m; vs+=d*d;} return {mean:m,se:Math.sqrt(vs/Math.max(1,n-1))/Math.sqrt(n)}; } const D=mSe(dlt), V=mSe(veg), R=mSe(rho); return {delta:D.mean, vega:V.mean, rho:R.mean, seDelta:D.se, seVega:V.se, seRho:R.se}; }
+      // Chart setup (D3) and update/animate functions
+      const margin = { top: 20, right: 15, bottom: 60, left: 60 };
+      const width = 600 - margin.left - margin.right;
+      const height = 600 - margin.top - margin.bottom;
 
-    // ---------- D3 helpers ----------
-    let clipIdCounter = 0;
-    function getSize(svg){ const r=svg.node().getBoundingClientRect(); return {w:r.width, h:r.height}; }
-    // setupSVG now returns a top-level group `g` (for axes) and a clipped `plot` group for plotted shapes
-    function setupSVG(svg){ svg.selectAll('*').remove(); const {w,h}=getSize(svg); const m={t:20,r:40,b:40,l:50}; const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`); let iw=w-m.l-m.r, ih=h-m.t-m.b;
-      // guard against zero/NaN sizes (can happen if element not yet laid out)
-      if(!Number.isFinite(iw) || iw <= 0) iw = Math.max(1, (svg.node().clientWidth || 600) - m.l - m.r);
-      if(!Number.isFinite(ih) || ih <= 0) ih = Math.max(1, (svg.node().clientHeight || 340) - m.t - m.b);
-      const clipId = `mc-clip-${++clipIdCounter}`;
-      svg.append('defs').append('clipPath').attr('id',clipId).append('rect').attr('x',0).attr('y',0).attr('width',iw).attr('height',ih);
-      const plot = g.append('g').attr('class','plot').attr('clip-path',`url(#${clipId})`);
-      return {g, plot, iw, ih, m, w, h}; }
-    function fmt(v,n=4){ return Number.isFinite(v)? v.toFixed(n): String(v); }
+      const xScale = d3.scale.linear().domain([0, 1]).range([0, width]);
+      const yScale = d3.scale.linear().domain([0, 1]).range([height, 0]);
 
-    // Histogram (D3) with tooltip
-    function drawHistogramD3(svgSel, centers, counts){
-      const svg=d3.select(svgSel); const {g, plot, iw, ih}=setupSVG(svg);
-      const x=d3.scaleLinear().domain(d3.extent(centers)).range([0,iw]);
-      const y=d3.scaleLinear().domain([0, d3.max(counts)||1]).nice().range([ih,0]);
-      const xAxis=g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(6));
-      const yAxis=g.append('g').call(d3.axisLeft(y).ticks(5));
-      const bw = iw/Math.max(centers.length,1);
-      // pair centers/counts and filter non-finite entries
-      const histData = centers.map((c,i)=>({c, n:counts[i]})).filter(d=>Number.isFinite(d.c) && Number.isFinite(d.n));
-      if(histData.length===0) return; // nothing valid to draw
-      // draw bars into the clipped plot group so axes remain visible
-      plot.selectAll('rect.bar').data(histData).join('rect')
-        .attr('class','bar')
-        .attr('x',d=>Number.isFinite(x(d.c))? x(d.c)-bw/2 : 0)
-        .attr('width', Math.max(1, bw*0.95))
-        .attr('y',d=>{ const yy = y(d.n); return Number.isFinite(yy)? yy : ih; })
-        .attr('height',d=>{ const yy = y(d.n); return Number.isFinite(yy)? (ih - yy) : 0; })
-        .attr('fill','#4b9ce2')
-        .on('mousemove', (evt,d)=> tooltip.show(`<b>center</b> ${fmt(d.c)}<br><b>count</b> ${d.n}`, evt))
-        .on('mouseleave', ()=> tooltip.hide());
-      const zoom=d3.zoom().scaleExtent([0.5, 20]).on('zoom', (e)=>{
-        const zx=e.transform.rescaleX(x); xAxis.call(d3.axisBottom(zx).ticks(6));
-        plot.selectAll('rect.bar')
-          .attr('x',d=>Number.isFinite(zx(d.c))? zx(d.c)-bw/2 : 0)
-          .attr('width', Math.max(1, (zx(centers[1]||centers[0]) - zx(centers[0]))*0.95 ));
+      const svg = d3
+        .select('#scatter')
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .attr('class', 'chart');
+      const mainG = svg
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+      mainG
+        .append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.svg.axis().scale(xScale).orient('bottom'));
+      mainG.append('g').call(d3.svg.axis().scale(yScale).orient('left'));
+      const g = mainG.append('g');
+
+      const convMargin = { top: 20, right: 20, bottom: 30, left: 50 };
+      const convWidth = width - convMargin.left - convMargin.right;
+      const convHeight = 200;
+      const convSvg = d3
+        .select('#convergence')
+        .append('svg')
+        .attr('width', convWidth + convMargin.left + convMargin.right)
+        .attr('height', convHeight + convMargin.top + convMargin.bottom)
+        .append('g')
+        .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
+      const xConv = d3.scale.linear().range([0, convWidth]);
+      const yConv = d3.scale.linear().range([convHeight, 0]);
+      const xAxisConv = d3.svg.axis().scale(xConv).orient('bottom');
+      const yAxisConv = d3.svg.axis().scale(yConv).orient('left');
+      convSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`);
+      convSvg.append('g').attr('class', 'y-axis');
+      // Convergence plot axis labels
+      convSvg
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('text-anchor', 'middle')
+        .attr('x', convWidth / 2)
+        .attr('y', convHeight + convMargin.bottom - 5)
+        .text('Iteration');
+      convSvg
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('text-anchor', 'middle')
+        .attr(
+          'transform',
+          `translate(${-convMargin.left + 15},${convHeight / 2}) rotate(-90)`
+        )
+        .text('π Estimate');
+      const areaGen = d3.svg.area().x((d, i) => xConv(i + 1));
+      const lineGen = d3.svg
+        .line()
+        .x((d, i) => xConv(i + 1))
+        .y((d) => yConv(d));
+      convSvg
+        .append('path')
+        .attr('class', 'area')
+        .style('fill', 'lightsteelblue')
+        .style('opacity', 0.3);
+      convSvg
+        .append('path')
+        .attr('class', 'line')
+        .style('fill', 'none')
+        .style('stroke', 'steelblue');
+
+      /**
+       * Dispatch to the selected sampling method.
+       * @param {string} key - method key
+       * @param {number} N - number of samples
+       * @returns {{points: Array<[number,number]>, values: number[]}}
+       */
+      function simulate(key, N) {
+        const fn = methods[key] || methods.quarter;
+        return fn(N);
+      }
+      const varSvg = d3
+        .select('#variance')
+        .append('svg')
+        .attr('width', convWidth + convMargin.left + convMargin.right)
+        .attr('height', convHeight + convMargin.top + convMargin.bottom)
+        .append('g')
+        .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
+      const methodKeys = Object.keys(methods);
+      const xBar = d3.scale.ordinal().domain(methodKeys).rangeBands([0, convWidth], 0.2);
+      const yBar = d3.scale.linear().range([convHeight, 0]);
+      // Axes for variance (std. error) bar chart
+      const xAxisBar = d3.svg.axis().scale(xBar).orient('bottom');
+      const yAxisBar = d3.svg.axis().scale(yBar).orient('left');
+      varSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`).call(xAxisBar);
+      varSvg.append('g').attr('class', 'y-axis').call(yAxisBar);
+      // Variance chart axis labels
+      varSvg
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('text-anchor', 'middle')
+        .attr('x', convWidth / 2)
+        .attr('y', convHeight + convMargin.bottom - 5)
+        .text('Method');
+      varSvg
+        .append('text')
+        .attr('class', 'axis-label')
+        .attr('text-anchor', 'middle')
+        .attr(
+          'transform',
+          `translate(${-convMargin.left + 15},${convHeight / 2}) rotate(-90)`
+        )
+        .text('Std. Error (π)');
+
+      /**
+       * Update scatter, convergence, and variance charts.
+       * @param {number} N - number of samples (ignored if data provided)
+       * @param {{points:Array,values:Array}} [data] - explicit sample data for streaming
+       */
+      function update(N, data) {
+        const methodKey = methodEl.value;
+        const points = data ? data.points : simulate(methodKey, N).points;
+        const values = data ? data.values : simulate(methodKey, N).values;
+
+        // If no data points, clear charts and exit to avoid NaN issues
+        if (values.length === 0) {
+          g.selectAll('circle').remove();
+          convSvg.select('.area').datum([]).attr('d', '');
+          convSvg.select('.line').datum([]).attr('d', '');
+          varSvg.selectAll('.bar').remove();
+          piEl.textContent = 'N/A';
+          return;
+        }
+
+        // Scatter plot (only if 2D points available)
+        const scatter = g.selectAll('circle').data(points);
+        scatter.exit().remove();
+        scatter.enter().append('circle').attr('r', 2);
+        scatter
+          .attr('cx', (d) => xScale(d[0]))
+          .attr('cy', (d) => yScale(d[1]))
+          .style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
+
+        // Cumulative π estimates for convergence
+        const cumEst = [];
+        let sum = 0;
+        for (let i = 0; i < values.length; i++) {
+          sum += values[i];
+          const avg = sum / (i + 1);
+          // scale average to π (CPU methods all use quarter-circle sampling)
+          cumEst.push(avg * 4);
+        }
+        // Compute error bands (±1σ/√i)
+        const lower = [];
+        const upper = [];
+        let cumSum2 = 0;
+        let sumSq = 0;
+        for (let i = 0; i < values.length; i++) {
+          cumSum2 += values[i];
+          sumSq += values[i] * values[i];
+          const meanY = cumSum2 / (i + 1);
+          const varY = sumSq / (i + 1) - meanY * meanY;
+          const se = Math.sqrt(varY / (i + 1));
+          // convert standard error to π scale
+          const delta = 4 * se;
+          lower.push(cumEst[i] - delta);
+          upper.push(cumEst[i] + delta);
+        }
+        // Update convergence chart axes & area/line
+        const Nmax = Math.max(1, values.length);
+        xConv.domain([1, Nmax]);
+        const yMin = d3.min(lower.concat(cumEst));
+        const yMax = d3.max(upper.concat(cumEst));
+        yConv.domain([yMin * 0.95, yMax * 1.05]);
+        convSvg.select('.x-axis').call(xAxisConv);
+        convSvg.select('.y-axis').call(yAxisConv);
+        convSvg
+          .select('.area')
+          .datum(cumEst)
+          .attr(
+            'd',
+            areaGen.y0((d, i) => yConv(lower[i])).y1((d, i) => yConv(upper[i]))
+          );
+        convSvg.select('.line').datum(cumEst).attr('d', lineGen);
+
+        // Display final approximation
+        const final = cumEst.length > 0 ? cumEst[cumEst.length - 1] : 0;
+        piEl.textContent = values.length > 0 ? final.toFixed(4) : 'N/A';
+
+        // Update variance/comparison bar chart (standard error per method)
+        const seData = methodKeys.map((key) => {
+          const curN = values.length;
+          const { values: vals } = simulate(key, curN);
+          const sumVal = d3.sum(vals);
+          const sumSqVal = d3.sum(vals.map((v) => v * v));
+          const varY = sumSqVal / vals.length - (sumVal / vals.length) ** 2;
+          return { method: key, se: 4 * Math.sqrt(varY / vals.length) };
+        });
+        const yMaxBar = d3.max(seData, (d) => d.se) || 0;
+        yBar.domain([0, yMaxBar * 1.1]);
+        varSvg.select('.y-axis').call(yAxisBar);
+        const bars = varSvg.selectAll('.bar').data(seData);
+        bars.exit().remove();
+        bars
+          .enter()
+          .append('rect')
+          .attr('class', 'bar')
+          .attr('x', (d) => xBar(d.method))
+          .attr('width', xBar.rangeBand())
+          .style('fill', 'orange');
+        bars
+          .attr('y', (d) => yBar(d.se))
+          .attr('height', (d) => convHeight - yBar(d.se));
+      }
+
+      // User must enter N and click Animate to run a single batch
+      document.getElementById('animateBtn').addEventListener('click', () => {
+        const total = +inputEl.value;
+        if (total > 0) animate(total);
       });
-      svg.call(zoom).on('dblclick.zoom', null);
-      svg.on('dblclick', ()=>{ svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity); });
+  /**
+   * Animate or statically plot sampling in batches with adjustable speed.
+   * @param {number} total - total points to sample
+   */
+  let timer = null;
+  function animate(total) {
+    // clear any prior animation
+    if (timer) clearInterval(timer);
+    // reset charts
+    g.selectAll('circle').remove();
+    convSvg.select('.area').datum([]).attr('d', '');
+    convSvg.select('.line').datum([]).attr('d', '');
+    varSvg.selectAll('.bar').remove();
+    piEl.textContent = '...';
+
+    const methodKey = methodEl.value;
+    const batchSize = +batchSlider.value;
+    const delay = +speedSlider.value;
+    // Pre-generate full sequence for quasi
+    const full = methodKey === 'quasi' ? simulate(methodKey, total) : null;
+    // If batchSize >= total, do one-off draw
+    if (batchSize >= total) {
+      const pts = full ? full.points : simulate(methodKey, total).points;
+      const vals = full ? full.values : simulate(methodKey, total).values;
+      update(undefined, { points: pts, values: vals });
+      return;
     }
-
-    // Bars (estimators) with shaded 95% CI (MC) + BS model‑risk band and tooltip
-    function drawBarsD3(svgSel, labels, values, ciLows=[], ciHighs=[]){
-      const svg=d3.select(svgSel); const {g, plot, iw, ih}=setupSVG(svg);
-      // filter finite values
-      const vals = values.map(v=> Number.isFinite(v)? v : NaN);
-      const x=d3.scaleLinear().domain([0, labels.length]).range([0,iw]);
-      const yMax = d3.max([d3.max(vals.filter(Number.isFinite)) || 1, d3.max(ciHighs.filter(Number.isFinite)) || 0]);
-      const y=d3.scaleLinear().domain([0, yMax]).nice().range([ih,0]);
-      const xAxis=g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(labels.length).tickFormat((i)=>labels[i]||''));
-      const yAxis=g.append('g').call(d3.axisLeft(y).ticks(5));
-
-      const bw = iw/Math.max(1, labels.length)*0.55;
-
-      // CI bands (rectangles) behind bars
-      const hasCI = (i)=> Number.isFinite(ciLows[i]) && Number.isFinite(ciHighs[i]) && ciHighs[i] >= ciLows[i];
-      // CI bands drawn into clipped plot group
-      const ciData = values.map((v,i)=>({i, lo:ciLows[i], hi:ciHighs[i]})).filter(d=> Number.isFinite(d.lo) && Number.isFinite(d.hi));
-      plot.selectAll('rect.ci').data(ciData).join('rect')
-        .attr('class','ci')
-        .attr('x',d=>x(d.i+0.5)-bw/2)
-        .attr('width',bw)
-        .attr('y',d=> y(d.hi))
-        .attr('height',d=> (y(d.lo)-y(d.hi)))
-        .attr('fill','rgba(75,156,226,0.20)');
-
-      // Bars
-      const barData = values.map((v,i)=>({v,i})).filter(d=> Number.isFinite(d.v));
-      const bars = plot.selectAll('rect.bar').data(barData).join('rect')
-        .attr('class','bar')
-        .attr('x',d=>x(d.i+0.5)-bw/2)
-        .attr('y',d=>y(d.v))
-        .attr('width',bw)
-        .attr('height',d=>ih - y(d.v))
-        .attr('fill','#111')
-        .on('mousemove', (evt,d)=>{
-          const ciTxt = hasCI(d.i)? `<br><b>CI</b> [${fmt(ciLows[d.i])}, ${fmt(ciHighs[d.i])}]` : '';
-          tooltip.show(`<b>${labels[d.i]}</b><br><b>value</b> ${fmt(d.v)}${ciTxt}`, evt);
-        })
-        .on('mouseleave', ()=> tooltip.hide());
-
-      const zoom=d3.zoom().scaleExtent([0.8, 10]).on('zoom', (e)=>{
-        const zx=e.transform.rescaleX(x); xAxis.call(d3.axisBottom(zx).ticks(labels.length).tickFormat((v)=>labels[Math.round(v-0.5)]||''));
-        plot.selectAll('rect.ci').attr('x',d=>Number.isFinite(zx(d.i+0.5))? zx(d.i+0.5)-bw/2 : 0);
-        bars.attr('x',d=>Number.isFinite(zx(d.i+0.5))? zx(d.i+0.5)-bw/2 : 0);
-      });
-      svg.call(zoom).on('dblclick.zoom', null);
-      svg.on('dblclick', ()=>{ svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity); });
-    }
-
-    // Price paths (subset)
-    function drawPathsD3(svgSel, paths, logY){
-      const svg=d3.select(svgSel); const {g, plot, iw, ih}=setupSVG(svg);
-      if(!Array.isArray(paths) || paths.length===0) return;
-      const nSteps = paths[0]?.length || 1;
-      const x=d3.scaleLinear().domain([0, nSteps-1]).range([0,iw]);
-      const values = paths.flat().filter(Number.isFinite);
-      if(values.length===0) return;
-      const yDomain = d3.extent(values.map(v => logY? Math.log(Math.max(1e-12,v)) : v));
-      const y=d3.scaleLinear().domain(yDomain).nice().range([ih,0]);
-      const xAxis=g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x));
-      const yAxis=g.append('g').call(d3.axisLeft(y));
-      const line=d3.line().x((d,i)=>x(i)).y(d=>y(logY? Math.log(Math.max(1e-12,d)) : d));
-      // draw paths into clipped plot group (filter invalid points per path)
-      const safePaths = paths.map(p => Array.isArray(p)? p.filter(Number.isFinite) : []).filter(p=>p.length>0);
-      if(safePaths.length===0) return;
-      plot.selectAll('path.path').data(safePaths).join('path')
-        .attr('class','path')
-        .attr('fill','none').attr('stroke','rgba(75,156,226,0.6)').attr('stroke-width',1)
-        .attr('d',d=>line(d));
-      const overlay=plot.append('rect').attr('fill','transparent').attr('pointer-events','all').attr('x',0).attr('y',0).attr('width',iw).attr('height',ih)
-        .on('mousemove',(evt)=>{
-          const pt=d3.pointer(evt); const t=x.invert(pt[0]); tooltip.show(`<b>t</b> ${fmt(t,3)}`, evt);
-        })
-        .on('mouseleave', ()=> tooltip.hide());
-      const zoom=d3.zoom().scaleExtent([0.5, 20]).on('zoom', (e)=>{
-        const zx=e.transform.rescaleX(x); xAxis.call(d3.axisBottom(zx));
-        plot.selectAll('path.path').attr('d', d3.line().x((d,i)=>zx(i)).y(d=>y(logY? Math.log(Math.max(1e-12,d)) : d)));
-      });
-      svg.call(zoom).on('dblclick.zoom', null);
-      svg.on('dblclick', ()=>{ svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity); });
-    }
-
-    // Payoff diagram (scatter + payoff curve) with tooltip
-    function drawPayoffD3(svgSel, K, type, ST, payoffs, logS){
-      const svg=d3.select(svgSel); const {g, plot, iw, ih}=setupSVG(svg);
-      if(!Array.isArray(ST) || ST.length===0) return;
-      if(!Array.isArray(payoffs) || payoffs.length===0) return;
-      const xs = ST.map(s=>logS? Math.log(Math.max(1e-12,s)) : s).filter(Number.isFinite);
-      if(xs.length===0) return;
-      const finitePay = payoffs.filter(Number.isFinite);
-      if(finitePay.length===0) return;
-      const x = d3.scaleLinear().domain(d3.extent(xs)).nice().range([0,iw]);
-      const y = d3.scaleLinear().domain(d3.extent(finitePay)).nice().range([ih,0]);
-      const xAxis=g.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x));
-      const yAxis=g.append('g').call(d3.axisLeft(y));
-      // payoff curve
-      const samples=200; const xdom=x.domain();
-      const xGrid=d3.range(samples+1).map(i=>xdom[0] + (i/samples)*(xdom[1]-xdom[0]));
-      const line=d3.line().x(d=>x(d)).y(d=>{ const s=logS? Math.exp(d) : d; const py = type==='call'? Math.max(s-K,0) : Math.max(K-s,0); return y(py); });
-      plot.append('path').datum(xGrid).attr('fill','none').attr('stroke','#111').attr('stroke-width',1.5).attr('d',line);
-      // scatter
-      const dots = xs.map((sx,i)=>({sx,py:payoffs[i]})).filter(d=> Number.isFinite(d.sx) && Number.isFinite(d.py));
-      plot.selectAll('rect.dot').data(dots).join('rect')
-        .attr('class','dot').attr('x',d=>x(d.sx)-1).attr('y',d=>y(d.py)-1).attr('width',2).attr('height',2)
-        .attr('fill','rgba(239,68,68,0.55)')
-        .on('mousemove',(evt,d)=> tooltip.show(`<b>S_T</b> ${fmt(logS? Math.exp(d.sx): d.sx)}<br><b>payoff</b> ${fmt(d.py)}`, evt))
-        .on('mouseleave', ()=> tooltip.hide());
-      const zoom=d3.zoom().scaleExtent([0.5, 20]).on('zoom', (e)=>{
-        const zx=e.transform.rescaleX(x); const zy=e.transform.rescaleY(y);
-        xAxis.call(d3.axisBottom(zx)); yAxis.call(d3.axisLeft(zy));
-        const lineZ=d3.line().x(d=>zx(d)).y(d=>{ const s=logS? Math.exp(d) : d; const py= type==='call'? Math.max(s-K,0) : Math.max(K-s,0); return zy(py); });
-        plot.selectAll('path').attr('d',lineZ(xGrid));
-        plot.selectAll('rect.dot').attr('x',d=>zx(d.sx)-1).attr('y',d=>zy(d.py)-1);
-      });
-      svg.call(zoom).on('dblclick.zoom', null);
-      svg.on('dblclick', ()=>{ svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity); });
-    }
-
-    // ---------- Orchestration ----------
-    async function runSim(){
-      const p={ type: readSelect('optType','call'), S0: readNum('S0',100), K: readNum('K',100), r: readNum('r',0.03), sigma: readNum('sigma',0.25), T: readNum('T',0.5), steps: readInt('steps',128), paths: readInt('paths',80000), seed: readInt('seed',12345) };
-      const useCV = readSelect('cv','1')==='1';
-      const useAntithetic = readSelect('antithetic','1')==='1';
-      const pathsLog = readSelect('pathsLog','0')==='1';
-      const payoffLog = readSelect('payoffLog','0')==='1';
-      const bsRiskPct = readNum('bsRisk', 5.0)/100;
-
-      // run simulation (worker if available)
-      let mean,se,ciLow,ciHigh,payoffs,discST,ST,Zbar,sp;
-      try{
-        const res = await simulateMCAsync(p,useAntithetic);
-        [mean,se,ciLow,ciHigh,payoffs,discST,ST,Zbar,sp] = res;
-      }catch(err){ console.error('[simulateMCAsync] failed, falling back sync', err); const res = simulateMC(p,useAntithetic); [mean,se,ciLow,ciHigh,payoffs,discST,ST,Zbar,sp] = res; }
-
-      // subset of paths for plotting (≤ 200)
-      const rng=makeLCG(sp.seed); const dt=sp.T/sp.steps, sdt=Math.sqrt(dt), drift=(sp.r-0.5*sp.sigma*sp.sigma)*dt, vol=sp.sigma*sdt; const subsetCount=200; const stride=Math.max(1, Math.floor(sp.paths/subsetCount)); const paths=[]; for(let i=0;i<sp.paths;i+=stride){ let S=sp.S0; const path=[S]; for(let t=0;t<sp.steps;t++){ const z=normalBM(rng); S*=Math.exp(drift+vol*z); path.push(S);} paths.push(path); for(let j=1;j<stride && i+j<sp.paths;j++){ for(let t=0;t<sp.steps;t++) normalBM(rng);} }
-
-      const bs=BS(sp.S0,sp.K,sp.r,sp.sigma,sp.T,sp.type);
-      const bsLow = bs*(1-bsRiskPct), bsHigh = bs*(1+bsRiskPct);
-      let tag='MC', dispMean=mean, dispSe=se, dispCIL=ciLow, dispCIH=ciHigh, ciForBarsLow=[], ciForBarsHigh=[];
-      if(useCV){ const cv=controlVariate(payoffs,discST,sp.S0); tag='MC (CV)'; dispMean=cv.mean; dispSe=cv.se; dispCIL=cv.ciLow; dispCIH=cv.ciHigh; ciForBarsLow=[ciLow, cv.ciLow, bsLow]; ciForBarsHigh=[ciHigh, cv.ciHigh, bsHigh]; }
-      else { ciForBarsLow=[ciLow, bsLow]; ciForBarsHigh=[ciHigh, bsHigh]; }
-
-      const gBS=BSGreeks(sp.S0,sp.K,sp.r,sp.sigma,sp.T,sp.type); const gMC=mcPathGreeks(sp,ST,Zbar);
-
-      const throttleNote = `Rendered paths: ${paths.length} (of ${sp.paths.toLocaleString()}); scatter capped at ~4,000 points. Antithetic=${useAntithetic?'on':'off'}. Paths log=${pathsLog?'on':'off'}. Payoff log(S)=${payoffLog?'on':'off'}.`;
-      const statsEl=$('#stats'); if(statsEl){ statsEl.textContent=[ `${tag} Price: $${dispMean.toFixed(4)}`, `Std Error: ${dispSe.toFixed(4)}`, `95% CI: [${dispCIL.toFixed(4)}, ${dispCIH.toFixed(4)}]`, `Black–Scholes: $${bs.toFixed(4)} (model‑risk ±${(bsRiskPct*100).toFixed(1)}% ⇒ [${bsLow.toFixed(4)}, ${bsHigh.toFixed(4)}])`, `Settings: steps=${sp.steps}, paths=${sp.paths.toLocaleString()}, seed=${sp.seed}, type=${sp.type}`, '', 'Greeks (BS analytic):', `  Delta=${gBS.Delta.toFixed(6)}  Gamma=${gBS.Gamma.toFixed(6)}  Vega=${gBS.Vega.toFixed(6)}  Theta=${gBS['Theta (per year)'].toFixed(6)}  Rho=${gBS.Rho.toFixed(6)}`, 'Greeks (MC pathwise ±SE):', `  Delta=${gMC.delta.toFixed(6)} ± ${gMC.seDelta.toFixed(6)}`, `  Vega=${gMC.vega.toFixed(6)} ± ${gMC.seVega.toFixed(6)}`, `  Rho=${gMC.rho.toFixed(6)} ± ${gMC.seRho.toFixed(6)}`, throttleNote ].join("\n"); }
-
-      // Charts (D3)
-      const histData=(function(arr,bins=30){ let vmin=Infinity,vmax=-Infinity; for(const v of arr){ if(v<vmin)vmin=v; if(v>vmax)vmax=v; } if(!Number.isFinite(vmin)||!Number.isFinite(vmax)){ vmin=0; vmax=1; } let width=vmax-vmin; if(width<=1e-12){ vmin-=0.5; vmax+=0.5; width=vmax-vmin; } const centers=new Array(bins), counts=new Array(bins).fill(0); for(const v of arr){ let idx=Math.floor(((v-vmin)/width)*bins); if(idx<0) idx=0; if(idx>=bins) idx=bins-1; counts[idx]++; } for(let i=0;i<bins;i++) centers[i]=vmin+(i+0.5)*(width/bins); return {centers,counts}; })(payoffs,30);
-      drawHistogramD3('#hist', histData.centers, histData.counts);
-      const labels=useCV?['MC','MC (CV)','BS']:['MC','BS'];
-      const values=useCV?[mean,dispMean,bs]:[mean,bs];
-      drawBarsD3('#bars', labels, values, ciForBarsLow, ciForBarsHigh);
-      drawPathsD3('#pathsChart', paths, pathsLog);
-      drawPayoffD3('#payoffDiagram', sp.K, sp.type, ST, payoffs, payoffLog);
-    }
-
-    async function runDiagnostics(){
-      const box=$('#diag'); if(box){ box.value='(running diagnostics...)'; }
-      const out=[]; function line(s){ out.push(s); }
-      const p={ type:'call', S0:100, K:100, r:0.03, sigma:0.2, T:0.5, steps:64, paths:20000, seed:42 };
-      let m1,se1,cil1,cih1,pay1;
-      try{ [m1,se1,cil1,cih1,pay1] = await simulateMCAsync(p,false); } catch(e){ const r=simulateMC(p,false); [m1,se1,cil1,cih1,pay1] = r; }
-      let m2,se2; try{ const r2 = await simulateMCAsync(p,true); m2 = r2[0]; se2 = r2[1]; } catch(e){ const r2=simulateMC(p,true); m2=r2[0]; se2=r2[1]; }
-        const cBS=BS(p.S0,p.K,p.r,p.sigma,p.T,'call');
-        const putBS=BS(p.S0,p.K,p.r,p.sigma,p.T,'put');
-        const parityOK=Math.abs((cBS-putBS)-(p.S0-p.K*Math.exp(-p.r*p.T)))<1e-6;
-        const repro=(await (typeof simulateMCAsync==='function' ? (async ()=>{ try{ const r=await simulateMCAsync(p,false); return r[0]; }catch(e){ return simulateMC(p,false)[0]; } })() : Promise.resolve(simulateMC(p,false)[0])));
-        const reproOK=Math.abs(m1-repro)<1e-12;
-        const finiteOK=[m1,se1,cil1,cih1,cBS,putBS].every(Number.isFinite)&&pay1.every(Number.isFinite);
-        const hist=(function(arr,bins=30){ let vmin=Infinity,vmax=-Infinity; for(const v of arr){ if(v<vmin)vmin=v; if(v>vmax)vmax=v; } if(!Number.isFinite(vmin)||!Number.isFinite(vmax)){ vmin=0; vmax=1; } let width=vmax-vmin; if(width<=1e-12){ vmin-=0.5; vmax+=0.5; width=vmax-vmin; } const centers=new Array(bins), counts=new Array(bins).fill(0); for(const v of arr){ let idx=Math.floor(((v-vmin)/width)*bins); if(idx<0) idx=0; if(idx>=bins) idx=bins-1; counts[idx]++; } for(let i=0;i<bins;i++) centers[i]=vmin+(i+0.5)*(width/bins); return {centers,counts}; })(pay1,30);
-        const histOK=hist.counts.reduce((a,b)=>a+b,0)===pay1.length;
-        const callLB=Math.max(0, p.S0 - p.K*Math.exp(-p.r*p.T));
-        const lbOK = m1+1e-8 >= callLB;
-        const ciOK = (cil1 <= cBS && cBS <= cih1);
-        const seDrop = se2 <= se1;
-        // extra: odd paths handling
-        const pOdd={...p, paths:20001};
-        let paysOdd; try{ const rOdd = await simulateMCAsync(pOdd,true); paysOdd = rOdd[4]; } catch(e){ paysOdd = simulateMC(pOdd,true)[4]; }
-        const oddOK = paysOdd.length === pOdd.paths;
-        // strict printouts with 4 decimals where applicable
-        line('Strict Tests:');
-        line(`Put–Call Parity (BS): ${parityOK ? 'PASS' : 'FAIL'}`);
-        line(`Reproducibility: ${reproOK ? 'PASS' : 'FAIL'}`);
-        line(`Finite outputs: ${finiteOK ? 'PASS' : 'FAIL'}`);
-        line(`Histogram counts sum: ${histOK ? 'PASS' : 'FAIL'}`);
-        line(`No‑arbitrage lower bound: ${lbOK ? 'PASS' : 'FAIL'}`);
-        line(`BS within 95% MC CI: ${ciOK ? 'PASS' : 'FAIL'} [${fmt(cil1,4)}, ${fmt(cih1,4)}] vs ${fmt(cBS,4)}`);
-        line(`Antithetic variance reduction (SE): ${seDrop ? 'PASS' : 'FAIL'} base=${se1.toFixed(6)} anti=${se2.toFixed(6)}`);
-        line(`Antithetic truncation keeps sample size: ${oddOK ? 'PASS' : 'FAIL'}`);
-        if(box){ box.value=out.join("\n"); }
-      }, 10);
-    }
-
-    bind('runBtn','click', runSim);
-    bind('runDiag','click', runDiagnostics);
-    window.addEventListener('resize', runSim);
-
-    try { runSim(); runDiagnostics(); } catch(e){ const box=$('#diag'); if(box) box.value = `[fatal] init failed: ${e}`; console.error(e); }
-  });
+    let cumPointsLocal = [], cumValuesLocal = [], count = 0;
+    timer = setInterval(() => {
+      if (count >= total) {
+        clearInterval(timer);
+        timer = null;
+        return;
+      }
+      let pts, vals;
+      if (methodKey === 'quasi') {
+        pts = full.points.slice(count, count + batchSize);
+        vals = full.values.slice(count, count + batchSize);
+      } else {
+        const step = Math.min(batchSize, total - count);
+        ({ points: pts, values: vals } = simulate(methodKey, step));
+      }
+      cumPointsLocal = cumPointsLocal.concat(pts);
+      cumValuesLocal = cumValuesLocal.concat(vals);
+      update(undefined, { points: cumPointsLocal, values: cumValuesLocal });
+      count += pts.length;
+    }, delay);
+  }
+    });
   </script>
 </body>
 </html>
