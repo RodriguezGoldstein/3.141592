@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Standalone Pi Monte Carlo Simulation</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
   <style>
 body {
   font: 11px sans-serif;
@@ -22,9 +22,16 @@ body {
 
 .tooltip {
   position: absolute;
-  width: 200px;
-  height: 28px;
   pointer-events: none;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid #999;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  color: #111;
+  max-width: 260px;
 }
 
 /* Overall three-column layout: sidebar, scatter, and two charts */
@@ -114,7 +121,10 @@ body {
           <option value="quasi">Quasi‑MC</option>
         </select>
       </label>
+      <br>
+      <br>
       <button id="animateBtn">Animate</button>
+      <button id="resetZoomBtn" title="Reset scatter zoom">Reset Zoom</button>
       <h3>π ≈ <span id="pi"></span></h3>
       <br>
       <div class="legend">
@@ -187,39 +197,85 @@ body {
       const width = 600 - margin.left - margin.right;
       const height = 600 - margin.top - margin.bottom;
 
-      const xScale = d3.scale.linear().domain([0, 1]).range([0, width]);
-      const yScale = d3.scale.linear().domain([0, 1]).range([height, 0]);
+      const xScale = d3.scaleLinear().domain([0, 1]).range([0, width]);
+      const yScale = d3.scaleLinear().domain([0, 1]).range([height, 0]);
 
       const svg = d3
         .select('#scatter')
         .append('svg')
         .attr('width', width + margin.left + margin.right)
         .attr('height', height + margin.top + margin.bottom)
-        .attr('class', 'chart');
+        .attr('class', 'chart')
+        .attr('role', 'img')
+        .attr('aria-label', 'Scatter plot of sampled points');
       const mainG = svg
         .append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
-      mainG
-        .append('g')
-        .attr('transform', `translate(0,${height})`)
-        .call(d3.svg.axis().scale(xScale).orient('bottom'));
-      mainG.append('g').call(d3.svg.axis().scale(yScale).orient('left'));
-      const g = mainG.append('g');
+      const xAxis = d3.axisBottom(xScale);
+      const yAxis = d3.axisLeft(yScale);
+      mainG.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height})`).call(xAxis);
+      mainG.append('g').attr('class', 'y-axis').call(yAxis);
+      // content group that will be transformed together
+      const contentG = mainG.append('g').attr('class', 'content');
+      const pointsG = contentG.append('g');
+      // Quarter-circle overlay (draw once) inside contentG
+      const quarterPts = d3.range(0, Math.PI / 2 + 0.001, Math.PI / 180).map((t) => [Math.cos(t), Math.sin(t)]);
+      const circleLine = (xFn, yFn) => d3.line().x((d) => xFn(d[0])).y((d) => yFn(d[1]));
+      contentG.append('path').datum(quarterPts).attr('class', 'quarter-circle').attr('d', circleLine(xScale, yScale)).style('stroke', '#333').style('fill', 'none');
+
+      // Zoom behavior for scatter (attach to overlay rect inside plotting area)
+      const zoom = d3.zoom().scaleExtent([1, 40]).on('zoom', zoomed);
+      // clip path so content doesn't draw outside plot area (defs inside mainG so coords align)
+      mainG.append('defs').append('clipPath').attr('id', 'clip-scatter').append('rect').attr('x', 0).attr('y', 0).attr('width', width).attr('height', height);
+      contentG.attr('clip-path', 'url(#clip-scatter)');
+
+      // draw overlay (on top) to capture zoom and pointer events
+      const overlay = mainG
+        .append('rect')
+        .attr('class', 'zoom-rect')
+        .attr('width', width)
+        .attr('height', height)
+        .style('fill', 'none')
+        .style('pointer-events', 'all');
+      overlay.call(zoom);
+
+      // ensure axes are rendered above the plotted content, but keep the overlay on top
+      mainG.selectAll('.x-axis,.y-axis').raise();
+      overlay.raise();
+      function zoomed(event) {
+        const t = event.transform;
+        const zx = t.rescaleX(xScale);
+        const zy = t.rescaleY(yScale);
+        mainG.select('.x-axis').call(d3.axisBottom(zx));
+        mainG.select('.y-axis').call(d3.axisLeft(zy));
+        // Reposition plotted content using rescaled scales so clipping works consistently.
+        pointsG.selectAll('circle').attr('cx', (d) => zx(d[0])).attr('cy', (d) => zy(d[1]));
+        // redraw quarter-circle path using rescaled axes
+        const circleLineRescaled = d3.line().x((d) => zx(d[0])).y((d) => zy(d[1]));
+        contentG.select('.quarter-circle').attr('d', circleLineRescaled(quarterPts));
+      }
+
+      // tooltip div (shared)
+      const tooltip = d3.select('body').append('div').attr('class', 'tooltip').style('opacity', 0);
 
       const convMargin = { top: 20, right: 20, bottom: 30, left: 50 };
       const convWidth = width - convMargin.left - convMargin.right;
       const convHeight = 200;
-      const convSvg = d3
+      const convSvgOuter = d3
         .select('#convergence')
         .append('svg')
         .attr('width', convWidth + convMargin.left + convMargin.right)
         .attr('height', convHeight + convMargin.top + convMargin.bottom)
-        .append('g')
-        .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
-      const xConv = d3.scale.linear().range([0, convWidth]);
-      const yConv = d3.scale.linear().range([convHeight, 0]);
-      const xAxisConv = d3.svg.axis().scale(xConv).orient('bottom');
-      const yAxisConv = d3.svg.axis().scale(yConv).orient('left');
+        .attr('role', 'img')
+        .attr('aria-label', 'Convergence chart');
+      const convSvg = convSvgOuter.append('g').attr('transform', `translate(${convMargin.left},${convMargin.top})`);
+      // clip for convergence plotting area so area/line do not overlap axes when zoomed
+      convSvgOuter.append('defs').append('clipPath').attr('id', 'clip-conv').append('rect').attr('x', 0).attr('y', 0).attr('width', convWidth).attr('height', convHeight);
+      const convContent = convSvg.append('g').attr('class', 'conv-content').attr('clip-path', 'url(#clip-conv)');
+      const xConv = d3.scaleLinear().range([0, convWidth]);
+      const yConv = d3.scaleLinear().range([convHeight, 0]);
+      const xAxisConv = d3.axisBottom(xConv);
+      const yAxisConv = d3.axisLeft(yConv);
       convSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`);
       convSvg.append('g').attr('class', 'y-axis');
       // Convergence plot axis labels
@@ -239,21 +295,33 @@ body {
           `translate(${-convMargin.left + 15},${convHeight / 2}) rotate(-90)`
         )
         .text('π Estimate');
-      const areaGen = d3.svg.area().x((d, i) => xConv(i + 1));
-      const lineGen = d3.svg
+      const areaGen = d3.area().x((d, i) => xConv(i + 1));
+      const lineGen = d3
         .line()
         .x((d, i) => xConv(i + 1))
         .y((d) => yConv(d));
-      convSvg
+      convContent
         .append('path')
         .attr('class', 'area')
         .style('fill', 'lightsteelblue')
         .style('opacity', 0.3);
-      convSvg
+      convContent
         .append('path')
         .attr('class', 'line')
         .style('fill', 'none')
-        .style('stroke', 'steelblue');
+        .style('stroke', 'steelblue')
+        .style('stroke-width', 1.5);
+      // bring axes above the content (so the area/line do not overlap ticks/labels)
+      convSvg.selectAll('.x-axis,.y-axis').raise();
+
+      
+      // π reference line
+      convSvg.append('line').attr('class', 'pi-line').style('stroke', 'darkgreen').style('stroke-dasharray', '4,4');
+
+      // latest convergence data (kept for zoom redraw)
+      let latestCumEst = [];
+      let latestLower = [];
+      let latestUpper = [];
 
       /**
        * Dispatch to the selected sampling method.
@@ -270,14 +338,16 @@ body {
         .append('svg')
         .attr('width', convWidth + convMargin.left + convMargin.right)
         .attr('height', convHeight + convMargin.top + convMargin.bottom)
+        .attr('role', 'img')
+        .attr('aria-label', 'Standard error comparison')
         .append('g')
         .attr('transform', `translate(${convMargin.left},${convMargin.top})`);
       const methodKeys = Object.keys(methods);
-      const xBar = d3.scale.ordinal().domain(methodKeys).rangeBands([0, convWidth], 0.2);
-      const yBar = d3.scale.linear().range([convHeight, 0]);
+      const xBar = d3.scaleBand().domain(methodKeys).range([0, convWidth]).padding(0.2);
+      const yBar = d3.scaleLinear().range([convHeight, 0]);
       // Axes for variance (std. error) bar chart
-      const xAxisBar = d3.svg.axis().scale(xBar).orient('bottom');
-      const yAxisBar = d3.svg.axis().scale(yBar).orient('left');
+      const xAxisBar = d3.axisBottom(xBar);
+      const yAxisBar = d3.axisLeft(yBar);
       varSvg.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${convHeight})`).call(xAxisBar);
       varSvg.append('g').attr('class', 'y-axis').call(yAxisBar);
       // Variance chart axis labels
@@ -310,7 +380,7 @@ body {
 
         // If no data points, clear charts and exit to avoid NaN issues
         if (values.length === 0) {
-          g.selectAll('circle').remove();
+          pointsG.selectAll('circle').remove();
           convSvg.select('.area').datum([]).attr('d', '');
           convSvg.select('.line').datum([]).attr('d', '');
           varSvg.selectAll('.bar').remove();
@@ -319,13 +389,62 @@ body {
         }
 
         // Scatter plot (only if 2D points available)
-        const scatter = g.selectAll('circle').data(points);
+        const scatter = pointsG.selectAll('circle').data(points);
         scatter.exit().remove();
-        scatter.enter().append('circle').attr('r', 2);
-        scatter
-          .attr('cx', (d) => xScale(d[0]))
-          .attr('cy', (d) => yScale(d[1]))
+        const enter = scatter
+          .enter()
+          .append('circle')
+          .attr('r', 2)
           .style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
+        // if zoom transform present, position points with rescaled axes so they line up with current view
+        const t = d3.zoomTransform(overlay.node());
+        const zx = t.rescaleX(xScale);
+        const zy = t.rescaleY(yScale);
+        // merge and set positions for all immediately (no transition)
+        scatter.merge(enter).attr('cx', (d) => zx(d[0])).attr('cy', (d) => zy(d[1])).attr('r', 2).style('fill', (d) => (d[0] * d[0] + d[1] * d[1] < 1 ? 'blue' : 'red'));
+        // scatter tooltip: handled by overlay (overlay is on top to capture zoom)
+        overlay.on('mousemove', function (event) {
+          const pts = points; // closed-over points array
+          if (!pts || pts.length === 0) { tooltip.style('opacity', 0); return; }
+          const p = d3.pointer(event, overlay.node());
+          const t = d3.zoomTransform(overlay.node());
+          const zx = t.rescaleX(xScale);
+          const zy = t.rescaleY(yScale);
+          // find nearest point in screen coords
+          let best = null;
+          let bestDist = Infinity;
+          for (let i = 0; i < pts.length; i++) {
+            const sx = zx(pts[i][0]);
+            const sy = zy(pts[i][1]);
+            const dx = sx - p[0];
+            const dy = sy - p[1];
+            const ds = dx * dx + dy * dy;
+            if (ds < bestDist) { bestDist = ds; best = { d: pts[i], sx, sy }; }
+          }
+          // show tooltip if within ~8px
+          if (best && Math.sqrt(bestDist) < 8) {
+            const d = best.d;
+            const inside = d[0] * d[0] + d[1] * d[1] < 1;
+            tooltip.style('opacity', 1).html(`<strong>x:</strong> ${d[0].toFixed(3)}<br/><strong>y:</strong> ${d[1].toFixed(3)}<br/>${inside ? '<strong>Inside</strong>' : '<strong>Outside</strong>'}`)
+              .style('left', (event.pageX + 10) + 'px')
+              .style('top', (event.pageY + 10) + 'px');
+          } else {
+            tooltip.style('opacity', 0);
+          }
+        }).on('mouseleave', () => tooltip.style('opacity', 0));
+        // attach reset zoom control (reset both scatter and convergence)
+        const resetBtn = document.getElementById('resetZoomBtn');
+        if (resetBtn) {
+          resetBtn.onclick = () => {
+            overlay.transition().duration(200).call(zoom.transform, d3.zoomIdentity);
+            overlayConv.transition().duration(200).call(zoomConv.transform, d3.zoomIdentity);
+          };
+        }
+        // double-click handlers for overlays are attached once after overlays are created
+
+        // Convergence tooltip: handled on the convergence overlay (attached below)
+
+        // Variance bars tooltip will be attached after bars are rendered below
 
         // Cumulative π estimates for convergence
         const cumEst = [];
@@ -352,7 +471,7 @@ body {
           lower.push(cumEst[i] - delta);
           upper.push(cumEst[i] + delta);
         }
-        // Update convergence chart axes & area/line
+        // Update convergence chart axes & area/line (no transitions)
         const Nmax = Math.max(1, values.length);
         xConv.domain([1, Nmax]);
         const yMin = d3.min(lower.concat(cumEst));
@@ -360,14 +479,14 @@ body {
         yConv.domain([yMin * 0.95, yMax * 1.05]);
         convSvg.select('.x-axis').call(xAxisConv);
         convSvg.select('.y-axis').call(yAxisConv);
-        convSvg
-          .select('.area')
-          .datum(cumEst)
-          .attr(
-            'd',
-            areaGen.y0((d, i) => yConv(lower[i])).y1((d, i) => yConv(upper[i]))
-          );
+        // save latest arrays for zoom redraw
+        latestCumEst = cumEst.slice();
+        latestLower = lower.slice();
+        latestUpper = upper.slice();
+        convSvg.select('.area').datum(cumEst).attr('d', areaGen.y0((d, i) => yConv(lower[i])).y1((d, i) => yConv(upper[i])));
         convSvg.select('.line').datum(cumEst).attr('d', lineGen);
+        // update π reference line
+        convSvg.select('.pi-line').attr('x1', 0).attr('x2', convWidth).attr('y1', yConv(Math.PI)).attr('y2', yConv(Math.PI));
 
         // Display final approximation
         const final = cumEst.length > 0 ? cumEst[cumEst.length - 1] : 0;
@@ -384,19 +503,86 @@ body {
         });
         const yMaxBar = d3.max(seData, (d) => d.se) || 0;
         yBar.domain([0, yMaxBar * 1.1]);
-        varSvg.select('.y-axis').call(yAxisBar);
-        const bars = varSvg.selectAll('.bar').data(seData);
-        bars.exit().remove();
+        varSvg.select('.y-axis').transition().duration(200).call(yAxisBar);
+        const bars = varSvg.selectAll('.bar').data(seData, (d) => d.method);
+        bars.exit().transition().duration(200).attr('height', 0).remove();
         bars
           .enter()
           .append('rect')
           .attr('class', 'bar')
           .attr('x', (d) => xBar(d.method))
-          .attr('width', xBar.rangeBand())
-          .style('fill', 'orange');
-        bars
+          .attr('width', xBar.bandwidth())
+          .style('fill', 'orange')
+          .attr('y', convHeight)
+          .attr('height', 0)
+          .merge(bars)
+          .transition()
+          .duration(250)
+          .attr('x', (d) => xBar(d.method))
+          .attr('width', xBar.bandwidth())
           .attr('y', (d) => yBar(d.se))
           .attr('height', (d) => convHeight - yBar(d.se));
+        // attach variance tooltips
+        varSvg.selectAll('.bar')
+          .on('mouseover', function (event, d) {
+            tooltip.style('opacity', 1).html(`<strong>Method:</strong> ${d.method}<br><strong>Std. Error:</strong> ${d.se.toExponential(3)}`)
+              .style('left', (event.pageX + 10) + 'px')
+              .style('top', (event.pageY + 10) + 'px');
+          })
+          .on('mousemove', function (event) {
+            tooltip.style('left', (event.pageX + 10) + 'px').style('top', (event.pageY + 10) + 'px');
+          })
+          .on('mouseout', function () {
+            tooltip.style('opacity', 0);
+          });
+      }
+
+      // Zoom behavior for convergence chart (pan/zoom for x and y)
+      const zoomConv = d3.zoom().scaleExtent([1, 40]).on('zoom', zoomedConv);
+      // attach an overlay rect inside convSvg for zoom capture
+      const overlayConv = convSvg
+        .append('rect')
+        .attr('class', 'zoom-rect')
+        .attr('width', convWidth)
+        .attr('height', convHeight)
+        .style('fill', 'none')
+        .style('pointer-events', 'all');
+      overlayConv.call(zoomConv);
+      // attach dblclick reset handlers for overlays
+      overlay.on('dblclick', () => overlay.transition().duration(200).call(zoom.transform, d3.zoomIdentity));
+      overlayConv.on('dblclick', () => overlayConv.transition().duration(200).call(zoomConv.transform, d3.zoomIdentity));
+      // convergence tooltip handlers attached to overlayConv so they use the overlay's zoom transform
+      overlayConv.on('mousemove', function (event) {
+        if (latestCumEst.length === 0) { tooltip.style('opacity', 0); return; }
+        const pt = d3.pointer(event, convSvg.node());
+        const t = d3.zoomTransform(overlayConv.node());
+        const zx = t.rescaleX(xConv);
+        const zy = t.rescaleY(yConv);
+        const iter = Math.round(zx.invert(pt[0]));
+        if (iter < 1 || iter > latestCumEst.length) { tooltip.style('opacity', 0); return; }
+        const idx = iter - 1;
+        const est = latestCumEst[idx];
+        const low = latestLower[idx];
+        const up = latestUpper[idx];
+        tooltip.style('opacity', 1).html(
+          `<strong>Iteration:</strong> ${iter}<br>` +
+          `<strong>Estimate:</strong> ${est.toFixed(6)}<br>` +
+          `<strong>Lower:</strong> ${low.toFixed(6)} &nbsp; <strong>Upper:</strong> ${up.toFixed(6)}`
+        ).style('left', (event.pageX + 10) + 'px').style('top', (event.pageY + 10) + 'px');
+      }).on('mouseleave', () => tooltip.style('opacity', 0));
+      function zoomedConv(event) {
+        const t = event.transform;
+        const zx = t.rescaleX(xConv);
+        const zy = t.rescaleY(yConv);
+        convSvg.select('.x-axis').call(d3.axisBottom(zx));
+        convSvg.select('.y-axis').call(d3.axisLeft(zy));
+        if (latestCumEst.length > 0) {
+          const areaZoom = d3.area().x((d, i) => zx(i + 1)).y0((d, i) => zy(latestLower[i])).y1((d, i) => zy(latestUpper[i]));
+          const lineZoom = d3.line().x((d, i) => zx(i + 1)).y((d) => zy(d));
+          convSvg.select('.area').attr('d', areaZoom(latestCumEst));
+          convSvg.select('.line').attr('d', lineZoom(latestCumEst));
+          convSvg.select('.pi-line').attr('x1', 0).attr('x2', convWidth).attr('y1', zy(Math.PI)).attr('y2', zy(Math.PI));
+        }
       }
 
       // User must enter N and click Animate to run a single batch
@@ -413,7 +599,7 @@ body {
     // clear any prior animation
     if (timer) clearInterval(timer);
     // reset charts
-    g.selectAll('circle').remove();
+    pointsG.selectAll('circle').remove();
     convSvg.select('.area').datum([]).attr('d', '');
     convSvg.select('.line').datum([]).attr('d', '');
     varSvg.selectAll('.bar').remove();
